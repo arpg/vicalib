@@ -9,7 +9,7 @@
 #include <gflags/gflags.h>
 
 #include <HAL/Camera/CameraDevice.h>
-#include <HAL/IMU/ImuDevice.h>
+#include <HAL/IMU/IMUDevice.h>
 #include <visual-inertial-calibration/calibration-stats.h>
 #include <visual-inertial-calibration/eigen-alignment.h>
 #include <visual-inertial-calibration/boxcar-filter.h>
