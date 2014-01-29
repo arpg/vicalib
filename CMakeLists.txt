@@ -13,13 +13,13 @@ else()
   add_definitions(-UBUILD_GUI)
 endif()
 
-find_package(Calibu REQUIRED)
-find_package(Ceres REQUIRED)
-find_package(GFlags REQUIRED)
-find_package(GLog REQUIRED)
-find_package(HAL REQUIRED)
-find_package(OpenCV2 REQUIRED)
-find_package(Pangolin REQUIRED)
+find_package(Calibu)
+find_package(Ceres)
+find_package(GFlags)
+find_package(GLog)
+find_package(HAL)
+find_package(OpenCV2)
+find_package(Pangolin)
 
 include_directories(
   ${Pangolin_INCLUDE_DIRS}
@@ -56,4 +56,5 @@ def_executable(vicalib
   ${GLOG_LIBRARIES}
   ${OpenCV2_LIBRARIES}
   ${PbMsgs_LIBRARIES}
+  CONDITIONS Calibu_FOUND Ceres_FOUND GFLAGS_FOUND GLOG_FOUND HAL_FOUND OpenCV2_FOUND Pangolin_FOUND
   )
