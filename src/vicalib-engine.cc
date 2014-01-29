@@ -8,7 +8,7 @@
 #include <calibu/cam/CameraXml.h>
 #include <calibu/cam/CameraModelT.h>
 #include <HAL/Camera/CameraDevice.h>
-#include <HAL/IMU/ImuDevice.h>
+#include <HAL/IMU/IMUDevice.h>
 #include <glog/logging.h>
 #include <PbMsgs/Matrix.h>
 
