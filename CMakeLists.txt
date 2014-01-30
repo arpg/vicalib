@@ -13,13 +13,13 @@ else()
   add_definitions(-UBUILD_GUI)
 endif()
 
-find_package(Calibu)
-find_package(Ceres)
-find_package(GFlags)
-find_package(GLog)
-find_package(HAL)
-find_package(OpenCV2)
-find_package(Pangolin)
+find_package(Calibu QUIET)
+find_package(Ceres QUIET)
+find_package(GFlags QUIET)
+find_package(GLog QUIET)
+find_package(HAL QUIET)
+find_package(OpenCV2 QUIET)
+find_package(Pangolin QUIET)
 
 include_directories(
   ${Pangolin_INCLUDE_DIRS}
