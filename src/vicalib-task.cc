@@ -499,7 +499,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
-    LOG(INFO) << images_->at(ii).Timestamp();
+    LOG(INFO) << std::fixed << images_->at(ii).Timestamp();
     if (images_->at(ii).Timestamp() != frame_times_[ii]) {
       num_new_frames++;
       frame_times_[ii] = images_->at(ii).Timestamp();
@@ -535,7 +535,8 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
     ReadVector(imu.accel(), &accel);
     ReadVector(imu.gyro(), &gyro);
     if (calibrator_.AddImuMeasurements(gyro, accel, imu.device_time())) {
-      LOG(INFO) << "TIMESTAMPINFO: IMU Packet " << imu.device_time();
+      LOG(INFO) << "TIMESTAMPINFO: IMU Packet "
+                << std::fixed << imu.device_time();
     }
   }
 }
