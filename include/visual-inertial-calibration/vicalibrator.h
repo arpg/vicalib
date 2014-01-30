@@ -131,11 +131,9 @@ class ViCalibrator : public ceres::IterationCallback {
 #endif  // ANDROID
 
     solver_options_.update_state_every_iteration = true;
-    solver_options_.max_num_iterations = 10;
     solver_options_.function_tolerance = 1e-6;
     solver_options_.callbacks.push_back(this);
     solver_options_.trust_region_strategy_type = ceres::DOGLEG;
-
     problem_.reset(new ceres::Problem(prob_options_));
 
     Clear();
