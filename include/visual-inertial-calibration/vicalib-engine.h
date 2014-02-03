@@ -23,6 +23,7 @@ namespace visual_inertial_calibration {
 
 enum GridPreset {
   GridPresetGWUSmall  = 0,  // 19x10 grid at GWU
+  GridPresetGoogleLarge = 1,  // 25x36 from Google folks
 };
 
 enum StaticThresholdPreset {

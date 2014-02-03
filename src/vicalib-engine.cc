@@ -164,6 +164,10 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         grid_size = {19, 10};
         grid_spacing = 0.254 / 18;  // meters
         break;
+      case GridPresetGoogleLarge:
+        grid_size = {25, 36};
+        grid_spacing = 0.03156;  // meters
+        break;
       default:
         LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
         break;
