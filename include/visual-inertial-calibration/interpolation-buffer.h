@@ -42,31 +42,35 @@ struct InterpolationBufferT {
 
   typedef std::vector<ElementType,
                       Eigen::aligned_allocator<ElementType> > ElementVec;
-  ElementVec elements;
-  Scalar start_time;
-  Scalar end_time;
-  Scalar average_dt;
+  ElementVec elements_;
+  Scalar start_time_;
+  Scalar end_time_;
+  Scalar average_dt_;
 
-  explicit InterpolationBufferT(unsigned int size = 1000)
-      : start_time(-1),
-        end_time(-1) {
-    elements.reserve(size);
+  explicit InterpolationBufferT(unsigned int size)
+      : start_time_(-1),
+        end_time_(-1),
+        average_dt_(0) {
+    elements_.reserve(size);
   }
 
   // Adds an element to the interpolation buffer, updates the average
   // and end times
   void AddElement(const ElementType& element) {
-    CHECK_GT(element.time, end_time);
-    const size_t nElems = elements.size();
-    const Scalar dt = nElems == 0 ? 0 : element.time - elements.back().time;
+    CHECK_GT(element.time, end_time_);
+    const size_t nElems = elements_.size();
+    Scalar dt = 0;
+    if (nElems > 0) {
+      dt = element.time - elements_.back().time;
+    }
 
     // update the average dt
-    average_dt = (average_dt * nElems + dt) / (nElems + 1);
+    average_dt_ = (average_dt_ * nElems + dt) / (nElems + 1);
 
     // add the element and update the end time
-    elements.push_back(element);
-    end_time = element.time;
-    start_time = elements.front().time;
+    elements_.push_back(element);
+    end_time_ = element.time;
+    start_time_ = elements_.front().time;
   }
 
   // Gets the next element in the buffer, depending on the maximum
@@ -87,15 +91,15 @@ struct InterpolationBufferT {
     CHECK_NOTNULL(output);
 
     // if we have reached the end, interpolate and signal the end
-    if (*index_out + 1 >= elements.size()) {
+    if (*index_out + 1 >= elements_.size()) {
       *output = GetElement(max_time, index_out);
       return false;
-    } else if (elements[*index_out + 1].time > max_time) {
+    } else if (elements_[*index_out + 1].time > max_time) {
       *output = GetElement(max_time, index_out);
       return false;
     } else {
       ++(*index_out);
-      *output = elements[*index_out];
+      *output = elements_[*index_out];
       return true;
     }
   }
@@ -103,7 +107,7 @@ struct InterpolationBufferT {
   // Returns whether or not an element exists for the given time
   // time: The time for which we check the element
   bool HasElement(const Scalar time) {
-    return (time >= start_time && time <= end_time);
+    return (time >= start_time_ && time <= end_time_);
   }
 
   // Returns an interpolated element. Call HasElement before this
@@ -119,29 +123,30 @@ struct InterpolationBufferT {
     CHECK_NOTNULL(pIndex);
 
     // guess what the index would be
-    size_t guess_idx = (time - start_time) / average_dt;
-    const size_t n_elements = elements.size();
+    size_t guess_idx = (time - start_time_) / average_dt_;
+    const size_t n_elements = elements_.size();
     guess_idx = std::min(std::max(static_cast<unsigned int>(guess_idx), 0u),
-                         static_cast<unsigned int>(elements.size()) - 1u);
+                         static_cast<unsigned int>(elements_.size()) - 1u);
+    CHECK_GE(guess_idx, 0);
 
     // now using the guess, find a direction to go
-    if (elements[guess_idx].time > time) {
+    if (elements_[guess_idx].time > time) {
       // we need to go backwards
       if (guess_idx == 0) {
         *pIndex = guess_idx;
-        return elements.front();
+        return elements_.front();
       }
 
-      while ((guess_idx - 1) > 0 && elements[guess_idx - 1].time > time) {
+      while ((guess_idx - 1) > 0 && elements_[guess_idx - 1].time > time) {
         --guess_idx;
       }
-      const Scalar interpolator = ((time - elements[guess_idx - 1].time) /
-                                   (elements[guess_idx].time -
-                                    elements[guess_idx - 1].time));
+      const Scalar interpolator = ((time - elements_[guess_idx - 1].time) /
+                                   (elements_[guess_idx].time -
+                                    elements_[guess_idx - 1].time));
 
       *pIndex = guess_idx - 1;
-      ElementType res = (elements[guess_idx - 1] * (1 - interpolator) +
-                         elements[guess_idx] * interpolator);
+      ElementType res = (elements_[guess_idx - 1] * (1 - interpolator) +
+                         elements_[guess_idx] * interpolator);
 
       res.time = time;
       return res;
@@ -150,25 +155,26 @@ struct InterpolationBufferT {
     // we need to go forwards
     if (guess_idx == n_elements - 1) {
       *pIndex = guess_idx;
-      return elements.back();
+      return elements_.back();
     }
 
     while ((guess_idx + 1) < n_elements &&
-           elements[guess_idx + 1].time < time) {
+           elements_[guess_idx + 1].time < time) {
       ++guess_idx;
     }
 
-    const Scalar interpolator = ((time - elements[guess_idx].time) /
-                                 (elements[guess_idx + 1].time -
-                                  elements[guess_idx].time));
+    const Scalar interpolator = ((time - elements_[guess_idx].time) /
+                                 (elements_[guess_idx + 1].time -
+                                  elements_[guess_idx].time));
 
     *pIndex = guess_idx;
-    ElementType res = (elements[guess_idx] * (1 - interpolator) +
-                       elements[guess_idx + 1] * interpolator);
+    ElementType res = (elements_[guess_idx] * (1 - interpolator) +
+                       elements_[guess_idx + 1] * interpolator);
     res.time = time;
     return res;
   }
 
+// Retrieve measurements between two times (inclusive).
   void GetRange(const Scalar start_time,
                 const Scalar end_time,
                 ElementVec* measurements) {

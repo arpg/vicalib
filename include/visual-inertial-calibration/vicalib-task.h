@@ -41,17 +41,19 @@
 
 namespace visual_inertial_calibration {
 
-struct FrameStats {
-  FrameStats() : tested_frames(0), tears(0), stutters(0), jumps(0) { }
-  int tested_frames, tears, stutters, jumps;
-};
-
 struct VicalibGuiOptions;
 
+// Controls the data flow logic of calibration. Provides a minimal
+// interface for a calibration application.
 class VicalibTask {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
+  // Construct a task for a given number of cameras of known
+  // dimensions that uses a known Calibu calibration target.
+  //
+  // fix_intrinsics: Should the intrinsics be locked and only the
+  // extrinsics calibrated.
   VicalibTask(size_t num_cameras,
               const std::vector<size_t>& width,
               const std::vector<size_t>& height,
@@ -109,11 +111,11 @@ class VicalibTask {
   int calib_frame_;
   std::vector<bool> tracking_good_;
   aligned_vector<Sophus::SE3d> t_cw_;
-  FrameStats stats_;
   int num_frames_;
   ViCalibrator calibrator_;
   std::shared_ptr<pb::ImageArray> images_;
   aligned_vector<CameraAndPose> input_cameras_;
+  Vector6d input_imu_biases_;
   std::vector<double> max_reproj_errors_;
 
 #ifdef HAVE_PANGOLIN

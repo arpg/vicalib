@@ -153,8 +153,8 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
   }
 
-  Eigen::Vector6d biases(Eigen::Vector6d::Zero());
-  Eigen::Vector6d scale_factors(Eigen::Vector6d::Ones());
+  Vector6d biases(Vector6d::Zero());
+  Vector6d scale_factors(Vector6d::Ones());
   Eigen::Vector2i grid_size(FLAGS_grid_width, FLAGS_grid_height);
   double grid_spacing = FLAGS_grid_spacing;
 

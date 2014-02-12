@@ -6,6 +6,7 @@
 
 #include <sophus/se3.hpp>
 
+// Ceres container for SE3 parameterization.
 class LocalParamSe3 : public ceres::LocalParameterization {
  public:
   virtual ~LocalParamSe3() {}
@@ -28,9 +29,6 @@ class LocalParamSe3 : public ceres::LocalParameterization {
     CHECK_NOTNULL(x);
     CHECK_NOTNULL(jacobian);
 
-    // Largely zeroes.
-    memset(jacobian, 0, sizeof(*x) * 7 * 6);
-
     // This jacobian is 7x6 as it is the jacobian of the global variable
     // change (size 7) with respect to the local delta (size 6).
     // The global variable is structured as [q1 q2 q3 q4 t1 t2 t3] where
@@ -38,6 +36,11 @@ class LocalParamSe3 : public ceres::LocalParameterization {
     // the local variable is stctured as [dt1 dt2 dt3 w1 w2 w3] where dt
     // is the delta for translation and w is the angular velocity.
     // the jacobian is in ROW MAJOR format
+    // Largely zeroes.
+    int jacobian_cols = 7;
+    int jacobian_rows = 6;
+    memset(jacobian, 0, sizeof(*x) * jacobian_cols * jacobian_rows);
+
 
     // Explicit formulation. Needs to be optimized
     const double q1 = x[0];
@@ -96,6 +99,7 @@ class LocalParamSe3 : public ceres::LocalParameterization {
   }
 };
 
+// Ceres container for SO3 parameterization.
 class LocalParamSo3 : public ceres::LocalParameterization {
  public:
   virtual ~LocalParamSo3() {}

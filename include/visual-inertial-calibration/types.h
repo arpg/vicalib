@@ -36,39 +36,47 @@
 
 namespace visual_inertial_calibration {
 
-static const double kGravity = 9.8007;  // m/s^2
+// Shortcut for calibration provider gravity magnitude
+inline double gravity() {
+  return 9.8007;  // m/s^2
+}
 
+// Represents a 6-DOF position for a "rig" of multiple cameras.
 template<typename Scalar = double>
 struct PoseT {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  Sophus::SE3Group<Scalar> t_wp;
-  Sophus::SE3Group<Scalar> t_vs;
-  Eigen::Matrix<Scalar, 3, 1> v_w;
-  Eigen::Matrix<Scalar, 6, 1> b;
-  Eigen::Matrix<Scalar, Eigen::Dynamic, 1> cam_params;
-  std::vector<bool> param_mask;
-  bool is_param_mask_used;
-  bool is_active;
-  unsigned int id;
-  unsigned int opt_id;
-  double time;
-  std::vector<int> proj_residuals;
-  std::vector<int> inertial_residuals;
-  std::vector<int> binary_residuals;
-  std::vector<int> unary_residuals;
-  std::vector<int> landmarks;
-   aligned_vector<Sophus::SE3Group<Scalar> > t_sw;
+  PoseT() : is_param_mask_used_(false), is_active_(false),
+            id_(0), opt_id_(0), time_(0.0) {}
 
+  Sophus::SE3Group<Scalar> t_wp_;
+  Sophus::SE3Group<Scalar> t_vs_;
+  Eigen::Matrix<Scalar, 3, 1> v_w_;
+  Eigen::Matrix<Scalar, 6, 1> b_;
+  Eigen::Matrix<Scalar, Eigen::Dynamic, 1> cam_params_;
+  std::vector<bool> param_mask_;
+  bool is_param_mask_used_;
+  bool is_active_;
+  unsigned int id_;
+  unsigned int opt_id_;
+  double time_;
+  std::vector<int> proj_residuals_;
+  std::vector<int> inertial_residuals_;
+  std::vector<int> binary_residuals_;
+  std::vector<int> unary_residuals_;
+  std::vector<int> landmarks_;
+  aligned_vector<Sophus::SE3Group<Scalar> > t_sw;
+
+  // Retreive the transform to world coordinates for a single camera.
   const Sophus::SE3Group<Scalar>& GetTsw(const unsigned int cam_id,
                                          const calibu::CameraRigT<Scalar>& rig,
                                          const bool use_internal_t_sw) {
     while (t_sw.size() <= cam_id) {
-      if (use_internal_t_sw == false) {
-        t_sw.push_back((t_wp * rig.cameras[t_sw.size()].T_wc).inverse());
+      if (!use_internal_t_sw) {
+        t_sw.push_back((t_wp_ * rig.cameras[t_sw.size()].T_wc).inverse());
       } else {
         // this needs to be modified to work with stereo
-        t_sw.push_back((t_wp * t_vs).inverseb());
+        t_sw.push_back((t_wp_ * t_vs_).inverseb());
       }
     }
     return t_sw[cam_id];
@@ -85,7 +93,7 @@ struct PoseT {
 template<typename Scalar>
 static Eigen::Matrix<Scalar, 3, 1> GetGravityVector(
     const Eigen::Matrix<Scalar, 2, 1>& dir,
-    Scalar g = static_cast<Scalar>(kGravity)) {
+    Scalar g ) {
   Scalar sp = sin(dir[0]);
   Scalar cp = cos(dir[0]);
   Scalar sq = sin(dir[1]);
@@ -95,6 +103,7 @@ static Eigen::Matrix<Scalar, 3, 1> GetGravityVector(
   return vec;
 }
 
+// The intrinsics of an IMU for calibration.
 template<typename Scalar = double>
 struct ImuCalibrationT {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -103,12 +112,12 @@ struct ImuCalibrationT {
                   const Eigen::Matrix<Scalar, 3, 1>& b_g,
                   const Eigen::Matrix<Scalar, 3, 1>& b_a,
                   const Eigen::Matrix<Scalar, 2, 1>& g)
-      : t_vs(t_vs),
-        b_g(b_g),
-        b_a(b_a),
-        g(g),
-        g_vec(GetGravityVector(g)),
-        r((Eigen::Matrix<Scalar, 6, 1>() <<
+      : t_vs_(t_vs),
+        b_g_(b_g),
+        b_a_(b_a),
+        g_(g),
+        g_vec_(GetGravityVector(g, gravity())),
+        r_((Eigen::Matrix<Scalar, 6, 1>() <<
            IMU_GYRO_UNCERTAINTY,
            IMU_GYRO_UNCERTAINTY,
            IMU_GYRO_UNCERTAINTY,
@@ -118,22 +127,22 @@ struct ImuCalibrationT {
   }
 
   /// \brief Calibration from vehicle to sensor frame (monocular for now)
-  Sophus::SE3Group<Scalar> t_vs;
+  Sophus::SE3Group<Scalar> t_vs_;
 
   /// \brief Gyroscope bias vector
-  Eigen::Matrix<Scalar, 3, 1> b_g;
+  Eigen::Matrix<Scalar, 3, 1> b_g_;
 
   /// \brief Accelerometer bias vector
-  Eigen::Matrix<Scalar, 3, 1> b_a;
+  Eigen::Matrix<Scalar, 3, 1> b_a_;
 
   /// \brief Gravity vector (2D, parametrized by roll and pitch of the
   /// vector wrt the ground plane)
-  Eigen::Matrix<Scalar, 2, 1> g;
-  Eigen::Matrix<Scalar, 3, 1> g_vec;
+  Eigen::Matrix<Scalar, 2, 1> g_;
+  Eigen::Matrix<Scalar, 3, 1> g_vec_;
 
   /// \brief Sensor uncertainty. The first 3 rows/cols are gyroscope
   /// and the last are accel
-  Eigen::Matrix<Scalar, 6, 6> r;
+  Eigen::Matrix<Scalar, 6, 6> r_;
 };
 
 template<typename Scalar>
@@ -146,7 +155,7 @@ template<typename Scalar>
 ///
 static Eigen::Matrix<Scalar, 3, 2> dGravity_dDirection(
     const Eigen::Matrix<Scalar, 2, 1>& dir,
-    Scalar g = visual_inertial_calibration::kGravity) {
+    Scalar g) {
   Scalar sp = sin(dir[0]);
   Scalar cp = cos(dir[0]);
   Scalar sq = sin(dir[1]);
@@ -157,39 +166,41 @@ static Eigen::Matrix<Scalar, 3, 2> dGravity_dDirection(
   return vec;
 }
 
+// Represents 6-DOF status of an IMU at a specific time.
 template<typename Scalar = double>
 struct ImuPoseT {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
   explicit ImuPoseT(const PoseT<Scalar>& pose)
-      : t_wp(pose.t_wp), v_w(pose.v_w),
-        w_w(Eigen::Matrix<Scalar, 3, 1>::Zero()), time(pose.time) { }
+      : t_wp_(pose.t_wp_), v_w_(pose.v_w_),
+        w_w_(Eigen::Matrix<Scalar, 3, 1>::Zero()), time_(pose.time_) { }
 
   ImuPoseT(const Sophus::SE3Group<Scalar>& twp,
            const Eigen::Matrix<Scalar, 3, 1>& v,
            const Eigen::Matrix<Scalar, 3, 1>& w, double time)
-      : t_wp(twp), v_w(v), w_w(w), time(time) { }
+      : t_wp_(twp), v_w_(v), w_w_(w), time_(time) { }
 
   operator Eigen::Matrix<Scalar, 10, 1>() {
     Eigen::Matrix<Scalar, 10, 1> res;
-    res.template head<3>() = t_wp.translation();
-    res.template segment<4>(3) = t_wp.unit_quaternion().coeffs();
-    res.template tail<3>() = v_w;
+    res.template head<3>() = t_wp_.translation();
+    res.template segment<4>(3) = t_wp_.unit_quaternion().coeffs();
+    res.template tail<3>() = v_w_;
     return res;
   }
 
   /// \brief pose in world coordinates
-  Sophus::SE3Group<Scalar> t_wp;
+  Sophus::SE3Group<Scalar> t_wp_;
 
   /// \brief velocity in world coordinates
-  Eigen::Matrix<Scalar, 3, 1> v_w;
+  Eigen::Matrix<Scalar, 3, 1> v_w_;
 
   /// \brief angular rates in world coordinates
-  Eigen::Matrix<Scalar, 3, 1> w_w;
+  Eigen::Matrix<Scalar, 3, 1> w_w_;
 
   /// \brief time in seconds
-  double time;
+  double time_;
 };
 
+// Timestamped IMU measurements at a single timestamp.
 template<typename Scalar = double>
 struct ImuMeasurementT {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -197,91 +208,96 @@ struct ImuMeasurementT {
   ImuMeasurementT() {}
   ImuMeasurementT(const Eigen::Matrix<Scalar, 3, 1>& w,
                   const Eigen::Matrix<Scalar, 3, 1>& a, double time)
-      : w(w), a(a), time(time) { }
+      : w_(w), a_(a), time(time) { }
 
   /// \brief angular rates in inertial coordinates
-  Eigen::Matrix<Scalar, 3, 1> w;
+  Eigen::Matrix<Scalar, 3, 1> w_;
   /// \brief accelerations in inertial coordinates
-  Eigen::Matrix<Scalar, 3, 1> a;
+  Eigen::Matrix<Scalar, 3, 1> a_;
   double time;
 
   ImuMeasurementT operator*(const Scalar &rhs) {
-    return ImuMeasurementT(w * rhs, a * rhs, time);
+    return ImuMeasurementT(w_ * rhs, a_ * rhs, time);
   }
 
   ImuMeasurementT operator+(const ImuMeasurementT &rhs) {
-    return ImuMeasurementT(w + rhs.w, a + rhs.a, time);
+    return ImuMeasurementT(w_ + rhs.w_, a_ + rhs.a_, time);
   }
 };
 
+// Base type for optimization residuals.
 template<typename Scalar, int kParamSize>
 struct ResidualT {
-  unsigned int residual_id;
-  unsigned int residual_offset;
-  Scalar weight;
-  Scalar orig_weight;
+  unsigned int residual_id_;
+  unsigned int residual_offset_;
+  Scalar weight_;
+  Scalar orig_weight_;
 };
 
+// Uni-directional error type.
 template<typename Scalar = double>
 struct UnaryResidualT : public ResidualT<Scalar, 6> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  static const unsigned int kResSize = 6;
-  unsigned int pose_id;
-  Sophus::SE3Group<Scalar> t_wp;
-  Eigen::Matrix<Scalar, kResSize, 6> dz_dx;
-  Eigen::Matrix<Scalar, 6, 1> residual;
+  static const unsigned int kResSize_ = 6;
+  unsigned int pose_id_;
+  Sophus::SE3Group<Scalar> t_wp_;
+  Eigen::Matrix<Scalar, kResSize_, 6> dz_dx_;
+  Eigen::Matrix<Scalar, 6, 1> residual_;
 };
 
+// Bidirectional error type.
 template<typename Scalar = double>
 struct BinaryResidualT : public ResidualT<Scalar, 6> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  static const unsigned int kResSize = 6;
-  unsigned int x1_id;
-  unsigned int x2_id;
-  Sophus::SE3Group<Scalar> t_ab;
-  Eigen::Matrix<Scalar, kResSize, 6> dz_dx1;
-  Eigen::Matrix<Scalar, kResSize, 6> dz_dx2;
-  Eigen::Matrix<Scalar, 6, 1> residual;
+  static const unsigned int kResSize_ = 6;
+  unsigned int x1_id_;
+  unsigned int x2_id_;
+  Sophus::SE3Group<Scalar> t_ab_;
+  Eigen::Matrix<Scalar, kResSize_, 6> dz_dx1_;
+  Eigen::Matrix<Scalar, kResSize_, 6> dz_dx2_;
+  Eigen::Matrix<Scalar, 6, 1> residual_;
 };
 
+// Storage for reprojection errors.
 template<typename Scalar = double, int LmSize = 1>
 struct ProjectionResidualT : public ResidualT<Scalar, 6> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  static const unsigned int kResSize = 2;
-  Eigen::Matrix<Scalar, 2, 1> z;
-  unsigned int x_meas_id;
-  unsigned int x_ref_id;
-  unsigned int landmark_id;
-  unsigned int cam_id;
+  static const unsigned int kResSize_ = 2;
+  Eigen::Matrix<Scalar, 2, 1> z_;
+  unsigned int x_meas_id_;
+  unsigned int x_ref_id_;
+  unsigned int landmark_id_;
+  unsigned int cam_id_;
 
-  Eigen::Matrix<Scalar, kResSize, LmSize> dz_dlm;
-  Eigen::Matrix<Scalar, 2, 6> dz_dx_meas;
-  Eigen::Matrix<Scalar, 2, 6> dz_dx_ref;
-  Eigen::Matrix<Scalar, 2, Eigen::Dynamic> dz_dcam_params;
-  Eigen::Matrix<Scalar, 2, 1> residual;
+  Eigen::Matrix<Scalar, kResSize_, LmSize> dz_dlm_;
+  Eigen::Matrix<Scalar, 2, 6> dz_dx_meas_;
+  Eigen::Matrix<Scalar, 2, 6> dz_dx_ref_;
+  Eigen::Matrix<Scalar, 2, Eigen::Dynamic> dz_dcam_params_;
+  Eigen::Matrix<Scalar, 2, 1> residual_;
 };
 
+// Optimization error storage for the IMU.
 template<typename Scalar = double, int ResidualSize = 15, int PoseSize = 15>
 struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   typedef ImuPoseT<Scalar> ImuPose;
   typedef ImuMeasurementT<Scalar> ImuMeasurement;
-  static const unsigned int kResSize = ResidualSize;
-  unsigned int pose1_id;
-  unsigned int pose2_id;
-  aligned_vector<ImuMeasurement> measurements;
-  aligned_vector<ImuPose> poses;
-  Eigen::Matrix<Scalar, kResSize, PoseSize> dz_dx1;
-  Eigen::Matrix<Scalar, kResSize, PoseSize> dz_dx2;
-  Eigen::Matrix<Scalar, kResSize, kResSize> cov_inv;
-  Eigen::Matrix<Scalar, kResSize, 6> dz_dy;
-  Eigen::Matrix<Scalar, 9, 2> dz_dg;
-  Eigen::Matrix<Scalar, kResSize, 6> dz_db;
-  Eigen::Matrix<Scalar, kResSize, 1> residual;
+  static const unsigned int kResSize_ = ResidualSize;
+  unsigned int pose1_id_;
+  unsigned int pose2_id_;
+  aligned_vector<ImuMeasurement> measurements_;
+  aligned_vector<ImuPose> poses_;
+  Eigen::Matrix<Scalar, kResSize_, PoseSize> dz_dx1_;
+  Eigen::Matrix<Scalar, kResSize_, PoseSize> dz_dx2_;
+  Eigen::Matrix<Scalar, kResSize_, kResSize_> cov_inv_;
+  Eigen::Matrix<Scalar, kResSize_, 6> dz_dy_;
+  Eigen::Matrix<Scalar, 9, 2> dz_dg_;
+  Eigen::Matrix<Scalar, kResSize_, 6> dz_db_;
+  Eigen::Matrix<Scalar, kResSize_, 1> residual_;
 
   static ImuPose IntegratePose(const ImuPose& pose,
                                const Eigen::Matrix<Scalar, 9, 1>& k,
@@ -293,14 +309,14 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
     ImuPose y = pose;
     // integrate translation
-    y.t_wp.translation() += k.template head<3>() * dt;
+    y.t_wp_.translation() += k.template head<3>() * dt;
     // integrate rotation using exp
     const Eigen::Quaternion<Scalar> q = (r_v2_v1.unit_quaternion()
-                                         * pose.t_wp.so3().unit_quaternion());
+                                         * pose.t_wp_.so3().unit_quaternion());
     // unfortunately need to memcpy to avoid normalization
-    memcpy(y.t_wp.so3().data(), q.coeffs().data(), sizeof(Scalar) * 4);
+    memcpy(y.t_wp_.so3().data(), q.coeffs().data(), sizeof(Scalar) * 4);
     // integrate velocity
-    y.v_w += k.template tail<3>() * dt;
+    y.v_w_ += k.template tail<3>() * dt;
 
     // jacobian of output pose relative to the derivative
     if (pdy_dk != 0) {
@@ -310,7 +326,7 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
           Eigen::Matrix<Scalar, 3, 3>::Identity() * dt;
       // dq/dw
       pdy_dk->template block<4, 3>(3, 3) = dq1q2_dq1<Scalar>(
-          pose.t_wp.so3().unit_quaternion())
+          pose.t_wp_.so3().unit_quaternion())
           * dqExp_dw<Scalar>(k.template segment<3>(3) * dt) * dt;
       // dv/da
       pdy_dk->template block<3, 3>(7, 6) =
@@ -344,37 +360,37 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
       Eigen::Matrix<Scalar, 9, 10>* dk_dx = 0) {
     double alpha = (z_end.time - (z_start.time + dt))
         / (z_end.time - z_start.time);
-    Eigen::Matrix<Scalar, 3, 1> zg = z_start.w * alpha
-        + z_end.w * (1.0 - alpha);
-    Eigen::Matrix<Scalar, 3, 1> za = z_start.a * alpha
-        + z_end.a * (1.0 - alpha);
+    Eigen::Matrix<Scalar, 3, 1> zg = z_start.w_ * alpha
+        + z_end.w_ * (1.0 - alpha);
+    Eigen::Matrix<Scalar, 3, 1> za = z_start.a_ * alpha
+        + z_end.a_ * (1.0 - alpha);
 
     // calculate derivatives at this point
     Eigen::Matrix<Scalar, 9, 1> deriv;
     // v (velocity)
-    deriv.template head<3>() = pose.v_w;
+    deriv.template head<3>() = pose.v_w_;
     // w (angular rates)
-    deriv.template segment<3>(3) = pose.t_wp.so3().Adj() *
+    deriv.template segment<3>(3) = pose.t_wp_.so3().Adj() *
         (zg.cwiseProduct(sf.template head<3>()) + bg);
     // a (acceleration)
-    deriv.template segment<3>(6) = pose.t_wp.so3() *
+    deriv.template segment<3>(6) = pose.t_wp_.so3() *
         (za.cwiseProduct(sf.template tail<3>()) + ba) - g_w;
 
     if (dk_db != 0) {
       dk_db->setZero();
-      dk_db->template block<3, 3>(3, 0) = pose.t_wp.so3().Adj();  // dw/dbg
-      dk_db->template block<3, 3>(6, 3) = pose.t_wp.so3().matrix();  // da/dba
+      dk_db->template block<3, 3>(3, 0) = pose.t_wp_.so3().Adj();  // dw/dbg
+      dk_db->template block<3, 3>(6, 3) = pose.t_wp_.so3().matrix();  // da/dba
     }
     if (dk_dx != 0) {
       dk_dx->setZero();
       dk_dx->template block<3, 3>(0, 7) =
           Eigen::Matrix<Scalar, 3, 3>::Identity();  // dv/dv
       dk_dx->template block<3, 4>(3, 3) = dqx_dq(
-          pose.t_wp.so3().unit_quaternion(), zg)
-          + dqx_dq(pose.t_wp.so3().unit_quaternion(), bg);  // dw/dq
+          pose.t_wp_.so3().unit_quaternion(), zg)
+          + dqx_dq(pose.t_wp_.so3().unit_quaternion(), bg);  // dw/dq
       dk_dx->template block<3, 4>(6, 3) = dqx_dq(
-          pose.t_wp.so3().unit_quaternion(), za)
-          + dqx_dq(pose.t_wp.so3().unit_quaternion(), ba);  // da/dq
+          pose.t_wp_.so3().unit_quaternion(), za)
+          + dqx_dq(pose.t_wp_.so3().unit_quaternion(), ba);  // da/dq
     }
     return deriv;
   }
@@ -548,8 +564,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
       res = IntegratePose(pose, k, dt / 6.0);
     }
 
-    res.w_w = k.template segment<3>(3);
-    res.time = z_end.time;
+    res.w_w_ = k.template segment<3>(3);
+    res.time_ = z_end.time;
     return res;
   }
 
@@ -665,11 +681,11 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
                                        bias.template tail<3>(), g);
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_plus;
-      pose_vec_plus.template head<3>() = pose_plus.t_wp.translation();
-      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp.so3()
+      pose_vec_plus.template head<3>() = pose_plus.t_wp_.translation();
+      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_plus.template tail<3>() = pose_plus.v_w;
+      pose_vec_plus.template tail<3>() = pose_plus.v_w_;
 
       bias.template head<3>() = bg;
       bias.template tail<3>() = ba;
@@ -681,11 +697,11 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
                                         bias.template tail<3>(), g);
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_minus;
-      pose_vec_minus.template head<3>() = pose_minus.t_wp.translation();
-      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp.so3()
+      pose_vec_minus.template head<3>() = pose_minus.t_wp_.translation();
+      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_minus.template tail<3>() = pose_minus.v_w;
+      pose_vec_minus.template tail<3>() = pose_minus.v_w_;
 
       dpose_db_fd.col(ii) = (pose_vec_plus - pose_vec_minus) / (2 * kEps);
     }
@@ -712,40 +728,40 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
           Eigen::Matrix<Scalar, 10, 1>::Zero();
       eps_vec[ii] = kEps;
       ImuPose pos_eps = pose;
-      pos_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_p = pos_eps.t_wp.so3().unit_quaternion();
+      pos_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_p = pos_eps.t_wp_.so3().unit_quaternion();
       q_p.coeffs() += eps_vec.template segment<4>(3);
-      memcpy(pos_eps.t_wp.so3().data(), q_p.coeffs().data(),
+      memcpy(pos_eps.t_wp_.so3().data(), q_p.coeffs().data(),
              sizeof(Scalar) * 4);
-      pos_eps.v_w += eps_vec.template tail<3>();
+      pos_eps.v_w_ += eps_vec.template tail<3>();
 
       ImuPose pose_plus = IntegrateImu(pos_eps, prev_meas, meas, bg, ba, g);
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_plus;
-      pose_vec_plus.template head<3>() = pose_plus.t_wp.translation();
-      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp.so3()
+      pose_vec_plus.template head<3>() = pose_plus.t_wp_.translation();
+      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_plus.template tail<3>() = pose_plus.v_w;
+      pose_vec_plus.template tail<3>() = pose_plus.v_w_;
 
       eps_vec[ii] = -kEps;
       pos_eps = pose;
-      pos_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_m = pos_eps.t_wp.so3().unit_quaternion();
+      pos_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_m = pos_eps.t_wp_.so3().unit_quaternion();
       q_m.coeffs() += eps_vec.template segment<4>(3);
-      pos_eps.t_wp.so3() = Sophus::SO3Group<Scalar>(q_m);
-      memcpy(pos_eps.t_wp.so3().data(), q_m.coeffs().data(),
+      pos_eps.t_wp_.so3() = Sophus::SO3Group<Scalar>(q_m);
+      memcpy(pos_eps.t_wp_.so3().data(), q_m.coeffs().data(),
              sizeof(Scalar) * 4);
-      pos_eps.v_w += eps_vec.template tail<3>();
+      pos_eps.v_w_ += eps_vec.template tail<3>();
 
       ImuPose pose_minus = IntegrateImu(pos_eps, prev_meas, meas, bg, ba, g);
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_minus;
-      pose_vec_minus.template head<3>() = pose_minus.t_wp.translation();
-      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp.so3()
+      pose_vec_minus.template head<3>() = pose_minus.t_wp_.translation();
+      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_minus.template tail<3>() = pose_minus.v_w;
+      pose_vec_minus.template tail<3>() = pose_minus.v_w_;
 
       dpose_dpose_df.col(ii) = (pose_vec_plus - pose_vec_minus) / (2 * kEps);
     }
@@ -789,10 +805,10 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
         prev_meas = &meas;
       }
       Eigen::Matrix<Scalar, 10, 1> pose_vec_plus;
-      pose_vec_plus.template head<3>() = pose_plus.t_wp.translation();
-      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp.so3()
+      pose_vec_plus.template head<3>() = pose_plus.t_wp_.translation();
+      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp_.so3()
           .unit_quaternion().coeffs();
-      pose_vec_plus.template tail<3>() = pose_plus.v_w;
+      pose_vec_plus.template tail<3>() = pose_plus.v_w_;
 
       eps_vec[ii] = -kEps;
       const Eigen::Matrix<Scalar, 6, 1> b_minus = bias_vec + eps_vec;
@@ -808,10 +824,10 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
         prev_meas = &meas;
       }
       Eigen::Matrix<Scalar, 10, 1> pos_minus_vec;
-      pos_minus_vec.template head<3>() = pose_minus.t_wp.translation();
-      pos_minus_vec.template segment<4>(3) = pose_minus.t_wp.so3()
+      pos_minus_vec.template head<3>() = pose_minus.t_wp_.translation();
+      pos_minus_vec.template segment<4>(3) = pose_minus.t_wp_.so3()
           .unit_quaternion().coeffs();
-      pos_minus_vec.template tail<3>() = pose_minus.v_w;
+      pos_minus_vec.template tail<3>() = pose_minus.v_w_;
 
       dpose_db_fd.col(ii) = (pose_vec_plus - pos_minus_vec) / (2 * kEps);
     }
@@ -840,12 +856,12 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
           Eigen::Matrix<Scalar, 10, 1>::Zero();
       eps_vec[ii] += kEps;
       ImuPose pose_plus = pose;
-      pose_plus.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_p = pose_plus.t_wp.so3().unit_quaternion();
+      pose_plus.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_p = pose_plus.t_wp_.so3().unit_quaternion();
       q_p.coeffs() += eps_vec.template segment<4>(3);
-      memcpy(pose_plus.t_wp.so3().data(), q_p.coeffs().data(),
+      memcpy(pose_plus.t_wp_.so3().data(), q_p.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_plus.v_w += eps_vec.template tail<3>();
+      pose_plus.v_w_ += eps_vec.template tail<3>();
 
       prev_meas = 0;
       for (const ImuMeasurement& meas : measurements) {
@@ -856,21 +872,21 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
       }
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_plus;
-      pose_vec_plus.template head<3>() = pose_plus.t_wp.translation();
-      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp.so3()
+      pose_vec_plus.template head<3>() = pose_plus.t_wp_.translation();
+      pose_vec_plus.template segment<4>(3) = pose_plus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_plus.template tail<3>() = pose_plus.v_w;
+      pose_vec_plus.template tail<3>() = pose_plus.v_w_;
 
       eps_vec[ii] -= 2 * kEps;
       ImuPose pose_minus = pose;
-      pose_minus.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_m = pose_minus.t_wp.so3().unit_quaternion();
+      pose_minus.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_m = pose_minus.t_wp_.so3().unit_quaternion();
       q_m.coeffs() += eps_vec.template segment<4>(3);
-      pose_minus.t_wp.so3() = Sophus::SO3Group<Scalar>(q_m);
-      memcpy(pose_minus.t_wp.so3().data(), q_m.coeffs().data(),
+      pose_minus.t_wp_.so3() = Sophus::SO3Group<Scalar>(q_m);
+      memcpy(pose_minus.t_wp_.so3().data(), q_m.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_minus.v_w += eps_vec.template tail<3>();
+      pose_minus.v_w_ += eps_vec.template tail<3>();
 
       prev_meas = 0;
       for (const ImuMeasurement& meas : measurements) {
@@ -881,11 +897,11 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
       }
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_minus;
-      pose_vec_minus.template head<3>() = pose_minus.t_wp.translation();
-      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp.so3()
+      pose_vec_minus.template head<3>() = pose_minus.t_wp_.translation();
+      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp_.so3()
           .unit_quaternion().coeffs();
       // do euler integration for now
-      pose_vec_minus.template tail<3>() = pose_minus.v_w;
+      pose_vec_minus.template tail<3>() = pose_minus.v_w_;
 
       dpose_dpose_fd.col(ii) = (pose_vec_plus - pose_vec_minus) / (2 * kEps);
     }
@@ -954,25 +970,25 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
           Eigen::Matrix<Scalar, 10, 1>::Zero();
       eps_vec[ii] += kEps;
       ImuPose pose_eps = pose;
-      pose_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_p = pose_eps.t_wp.so3().unit_quaternion();
+      pose_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_p = pose_eps.t_wp_.so3().unit_quaternion();
       q_p.coeffs() += eps_vec.template segment<4>(3);
-      memcpy(pose_eps.t_wp.so3().data(), q_p.coeffs().data(),
+      memcpy(pose_eps.t_wp_.so3().data(), q_p.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_eps.v_w += eps_vec.template tail<3>();
+      pose_eps.v_w_ += eps_vec.template tail<3>();
       Eigen::Matrix<Scalar, 9, 1> k1_plus = GetPoseDerivative(pose_eps, g,
                                                               z_start, z_end,
                                                               bg, ba, 0);
 
       eps_vec[ii] -= 2 * kEps;
       pose_eps = pose;
-      pose_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_m = pose_eps.t_wp.so3().unit_quaternion();
+      pose_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_m = pose_eps.t_wp_.so3().unit_quaternion();
       q_m.coeffs() += eps_vec.template segment<4>(3);
-      pose_eps.t_wp.so3() = Sophus::SO3Group<Scalar>(q_m);
-      memcpy(pose_eps.t_wp.so3().data(), q_m.coeffs().data(),
+      pose_eps.t_wp_.so3() = Sophus::SO3Group<Scalar>(q_m);
+      memcpy(pose_eps.t_wp_.so3().data(), q_m.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_eps.v_w += eps_vec.template tail<3>();
+      pose_eps.v_w_ += eps_vec.template tail<3>();
       Eigen::Matrix<Scalar, 9, 1> k1_minus = GetPoseDerivative(pose_eps, g,
                                                                z_start, z_end,
                                                                bg, ba, 0);
@@ -998,36 +1014,36 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
           Eigen::Matrix<Scalar, 10, 1>::Zero();
       eps_vec[ii] += kEps;
       ImuPose pose_eps = pose;
-      pose_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_p = pose_eps.t_wp.so3().unit_quaternion();
+      pose_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_p = pose_eps.t_wp_.so3().unit_quaternion();
       q_p.coeffs() += eps_vec.template segment<4>(3);
-      memcpy(pose_eps.t_wp.so3().data(), q_p.coeffs().data(),
+      memcpy(pose_eps.t_wp_.so3().data(), q_p.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_eps.v_w += eps_vec.template tail<3>();
+      pose_eps.v_w_ += eps_vec.template tail<3>();
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_plus;
       ImuPose posePlus = IntegratePose(pose_eps, k, dt * 0.5);
-      pose_vec_plus.template head<3>() = posePlus.t_wp.translation();
-      pose_vec_plus.template segment<4>(3) = posePlus.t_wp.so3()
+      pose_vec_plus.template head<3>() = posePlus.t_wp_.translation();
+      pose_vec_plus.template segment<4>(3) = posePlus.t_wp_.so3()
           .unit_quaternion().coeffs();
-      pose_vec_plus.template tail<3>() = posePlus.v_w;
+      pose_vec_plus.template tail<3>() = posePlus.v_w_;
 
       eps_vec[ii] -= 2 * kEps;
       pose_eps = pose;
-      pose_eps.t_wp.translation() += eps_vec.template head<3>();
-      Eigen::Quaternion<Scalar> q_m = pose_eps.t_wp.so3().unit_quaternion();
+      pose_eps.t_wp_.translation() += eps_vec.template head<3>();
+      Eigen::Quaternion<Scalar> q_m = pose_eps.t_wp_.so3().unit_quaternion();
       q_m.coeffs() += eps_vec.template segment<4>(3);
-      pose_eps.t_wp.so3() = Sophus::SO3Group<Scalar>(q_m);
-      memcpy(pose_eps.t_wp.so3().data(), q_m.coeffs().data(),
+      pose_eps.t_wp_.so3() = Sophus::SO3Group<Scalar>(q_m);
+      memcpy(pose_eps.t_wp_.so3().data(), q_m.coeffs().data(),
              sizeof(Scalar) * 4);
-      pose_eps.v_w += eps_vec.template tail<3>();
+      pose_eps.v_w_ += eps_vec.template tail<3>();
 
       Eigen::Matrix<Scalar, 10, 1> pose_vec_minus;
       ImuPose pose_minus = IntegratePose(pose_eps, k, dt * 0.5);
-      pose_vec_minus.template head<3>() = pose_minus.t_wp.translation();
-      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp.so3()
+      pose_vec_minus.template head<3>() = pose_minus.t_wp_.translation();
+      pose_vec_minus.template segment<4>(3) = pose_minus.t_wp_.so3()
           .unit_quaternion().coeffs();
-      pose_vec_minus.template tail<3>() = pose_minus.v_w;
+      pose_vec_minus.template tail<3>() = pose_minus.v_w_;
 
       dy_dy_fd.col(ii) = (pose_vec_plus - pose_vec_minus) / (2 * kEps);
     }
@@ -1090,26 +1106,26 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
       Eigen::Matrix<Scalar, 9, 1> k_plus = k;
       k_plus += eps_vec;
       Eigen::Matrix<Scalar, 10, 1> res_plus;
-      res_plus.template head<3>() = pose.t_wp.translation()
+      res_plus.template head<3>() = pose.t_wp_.translation()
           + k_plus.template head<3>() * dt;
 
       res_plus.template segment<4>(3) =
           (Sophus::SO3Group<Scalar>::exp(k_plus.template segment<3>(3) * dt).
-           unit_quaternion() * pose.t_wp.so3().unit_quaternion()).coeffs();
+           unit_quaternion() * pose.t_wp_.so3().unit_quaternion()).coeffs();
 
-      res_plus.template tail<3>() = pose.v_w + k_plus.template tail<3>() * dt;
+      res_plus.template tail<3>() = pose.v_w_ + k_plus.template tail<3>() * dt;
 
       eps_vec[ii] -= 2 * kEps;
       Eigen::Matrix<Scalar, 9, 1> kMinus = k;
       kMinus += eps_vec;
       Eigen::Matrix<Scalar, 10, 1> res_Minus;
-      res_Minus.template head<3>() = pose.t_wp.translation()
+      res_Minus.template head<3>() = pose.t_wp_.translation()
           + kMinus.template head<3>() * dt;
       res_Minus.template segment<4>(3) =
           (Sophus::SO3Group<Scalar>::exp(kMinus.template segment<3>(3) * dt) *
-           pose.t_wp.so3()).unit_quaternion().coeffs();
+           pose.t_wp_.so3()).unit_quaternion().coeffs();
 
-      res_Minus.template tail<3>() = pose.v_w + kMinus.template tail<3>() * dt;
+      res_Minus.template tail<3>() = pose.v_w_ + kMinus.template tail<3>() * dt;
 
       dpose_dk_d.col(ii) = (res_plus - res_Minus) / (2 * kEps);
     }

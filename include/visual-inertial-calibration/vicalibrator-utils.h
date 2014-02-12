@@ -29,12 +29,12 @@
 #include <glog/logging.h>
 #include <sophus/se3.hpp>
 
-namespace Eigen {
-typedef Matrix<double, 6, 1> Vector6d;
-typedef Matrix<double, 9, 1> Vector9d;
-}
 
 namespace visual_inertial_calibration {
+// Short-hand for Eigen types
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+typedef Eigen::Matrix<double, 9, 1> Vector9d;
+
 // #define ENABLE_TIMING
 extern int debug_level_threshold;
 extern int debug_level;
@@ -45,23 +45,12 @@ extern int debug_level;
 #define BA_TEST(x)
 #endif
 
-#define ForceStartTimer(x) double x = ba::Tic()
-#define ForcePrintTimer(x) VLOG(3) << ba::Toc(x) << " seconds -> "      \
-  << #x << std::endl
-#ifdef ENABLE_TIMING
-#define StartTimer(x) double x = ba::Tic()
-#define PrintTimer(x) VLOG(3) << ba::Toc(x) << " seconds -> "   \
-  << #x << std::endl
-#else
-#define StartTimer(x)
-#define PrintTimer(x)
-#endif
-
 static Eigen::IOFormat kCleanFmt(4, 0, ", ", ";\n", "", "");
 static Eigen::IOFormat kLongFmt(Eigen::FullPrecision, 0, ", ", ";\n", "", "");
 static const double kNormThreshold = 1e-3;
 static const double kTestingEps = 1e-9;
 
+// Transform a 4x1 (homogenous point) with an SE3.
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 4, 1> MultHomogeneous(
     const Sophus::SE3Group<Scalar>& lhs,
@@ -75,6 +64,7 @@ inline Eigen::Matrix<Scalar, 4, 1> MultHomogeneous(
   return out;
 }
 
+// Raises a floating point value to an integer exponent.
 template<typename Scalar = double>
 inline Scalar powi(const Scalar x, const int y) {
   if (y == 0) {
@@ -88,16 +78,6 @@ inline Scalar powi(const Scalar x, const int y) {
     }
     return ret;
   }
-}
-
-inline double Tic() {
-  struct timeval tv;
-  gettimeofday(&tv, 0);
-  return tv.tv_sec + 1e-6 * (tv.tv_usec);
-}
-
-inline double Toc(double tic) {
-  return Tic() - tic;
 }
 
 // this function implements d vee(log(A * exp(x) * B) ) / dx,which is in R^{6x6}
@@ -172,39 +152,6 @@ inline Eigen::Matrix<Scalar, 3, 4> dLog_dq(const Eigen::Quaternion<Scalar>& q) {
   }
 }
 
-template<typename Scalar>
-static bool _Test_dLog_dq(const Eigen::Quaternion<Scalar>& q) {
-  Scalar dEps = kTestingEps;
-  VLOG(3) << "q:" << q.coeffs().transpose() << std::endl;
-  Eigen::Matrix<Scalar, 3, 4> dLog_dq_fd;
-  for (int ii = 0; ii < 4; ++ii) {
-    Eigen::Matrix<Scalar, 4, 1> eps;
-    eps.setZero();
-    eps[ii] += dEps;
-    Eigen::Quaternion<Scalar> q_plus = q;
-    q_plus.coeffs() += eps;
-    Sophus::SO3Group<Scalar> so3_plus;
-    memcpy(so3_plus.data(), q_plus.coeffs().data(), sizeof(Scalar) * 4);
-    Eigen::Matrix<Scalar, 3, 1> res_plus = so3_plus.log();
-
-    eps[ii] -= 2 * dEps;
-    Eigen::Quaternion<Scalar> q_minus = q;
-    q_minus.coeffs() += eps;
-    Sophus::SO3Group<Scalar> so3_minus;
-    memcpy(so3_minus.data(), q_minus.coeffs().data(), sizeof(Scalar) * 4);
-    Eigen::Matrix<Scalar, 3, 1> res_minus = so3_minus.log();
-
-    dLog_dq_fd.col(ii) = (res_plus - res_minus) / (2 * dEps);
-  }
-  const Eigen::Matrix<Scalar, 3, 4> dlog = dLog_dq(q);
-  VLOG(3) << "dlog_dq = [" << dlog.format(kCleanFmt) << "]" << std::endl;
-  VLOG(3) << "dlog_dqf = [" << dLog_dq_fd.format(kCleanFmt) << "]"
-          << std::endl;
-  VLOG(3) << "dlog_dq - dlog_dqf = [" << (dlog - dLog_dq_fd).format(kCleanFmt)
-          << "]" << std::endl;
-  return (dlog - dLog_dq_fd).norm() < kNormThreshold;
-}
-
 template<typename Scalar = double>
 inline std::vector<Eigen::Matrix<Scalar, 3, 3>,
                    Eigen::aligned_allocator<Eigen::Matrix<Scalar, 3, 3> > >
@@ -234,6 +181,8 @@ dLog_dR(const Eigen::Matrix<Scalar, 3, 3>& r) {
   return res;
 }
 
+// The 4x3 derivative of the SO3 exponential quaternion with respect
+// to the tangent space parameters
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 4, 3> dqExp_dw(
     const Eigen::Matrix<Scalar, 3, 1>& w) {
@@ -251,12 +200,16 @@ inline Eigen::Matrix<Scalar, 4, 3> dqExp_dw(
           (s2 * w[1]) / 2, (s2 * w[2]) / 2).finished();
 }
 
+// The 4x4 derivative of the quaternion inverse with respect to the
+// quaternion parameters
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 4, 4> dqinv_dq() {
   return ((Eigen::Matrix<Scalar, 4, 1>() << 1, -1, -1, -1).finished())
       .asDiagonal();
 }
 
+// The 4x4 derivative of the multiplicative result of two quaternions
+// q1 and q2 with respect to the parameters of q2
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 4, 4> dq1q2_dq2(
     const Eigen::Quaternion<Scalar>& q1) {
@@ -265,6 +218,8 @@ inline Eigen::Matrix<Scalar, 4, 4> dq1q2_dq2(
           -q1.x(), -q1.y(), -q1.z(), q1.w()).finished();
 }
 
+// The 4x4 derivative of the multiplicative result of two quaternions
+// q1 and q2 with respect to the parameters of q1
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 4, 4> dq1q2_dq1(
     const Eigen::Quaternion<Scalar>& q2) {
@@ -273,6 +228,8 @@ inline Eigen::Matrix<Scalar, 4, 4> dq1q2_dq1(
           -q2.x(), -q2.y(), -q2.z(), q2.w()).finished();
 }
 
+// The 3x4 derivative of the 3d point x rotated by quaternion q with
+// respect to the quaternion parameters
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 3, 4> dqx_dq(
     const Eigen::Quaternion<Scalar>& q,
@@ -295,6 +252,10 @@ inline Eigen::Matrix<Scalar, 3, 4> dqx_dq(
           s1 - 2 * q.y() * x).finished();
 }
 
+// The 7x7 derivative of the result of the multiplication of two
+// transformations t1 and t2, with respect to the parameters of
+// t1. The transformations are parameterized as a 7d vectors,
+// comprising of 3 translation and 4 quaternion terms
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 7, 7> dt1t2_dt1(
     const Sophus::SE3Group<Scalar>& t1,
@@ -309,50 +270,6 @@ inline Eigen::Matrix<Scalar, 7, 7> dt1t2_dt1(
       dq1q2_dq1(t2.unit_quaternion());
 
   return dt1t2_dt2;
-}
-
-template<typename Scalar = double>
-inline Eigen::Matrix<Scalar, 6, 1> log_decoupled(
-    const Sophus::SE3Group<Scalar>& a, const Sophus::SE3Group<Scalar>& b) {
-  Eigen::Matrix<Scalar, 6, 1> res;
-  res.template head<3>() = a.translation() - b.translation();
-  res.template tail<3>() = (a.so3() * b.so3().inverse()).log();
-  return res;
-}
-
-template<typename Scalar = double>
-inline Eigen::Matrix<Scalar, 6, 7> dlog_decoupled_da(
-    const Sophus::SE3Group<Scalar>& a, const Sophus::SE3Group<Scalar>& b) {
-  Eigen::Matrix<Scalar, 6, 7> res;
-  Eigen::Quaternion<Scalar> qlog =
-      (a.so3() * b.so3().inverse()).unit_quaternion();
-  res.setZero();
-  res.template block<3, 3>(0, 0).setIdentity();
-  res.template block<3, 4>(3, 3) =
-      dLog_dq(qlog) *  dq1q2_dq1(b.so3().inverse().unit_quaternion());
-  return res;
-}
-
-template<typename Scalar = double>
-inline Eigen::Matrix<Scalar, 6, 7> dlog_decoupled_db(
-    const Sophus::SE3Group<Scalar>& a, const Sophus::SE3Group<Scalar>& b) {
-  Eigen::Matrix<Scalar, 6, 7> res;
-  Eigen::Quaternion<Scalar> qlog =
-      (a.so3() * b.so3().inverse()).unit_quaternion();
-  res.setZero();
-  res.template block<3, 3>(0, 0) = -Eigen::Matrix<Scalar, 3, 3>::Identity();
-  res.template block<3, 4>(3, 3) =
-      dLog_dq(qlog) *  dq1q2_dq2(a.unit_quaternion()) * dqinv_dq();
-  return res;
-}
-
-
-template<typename Scalar = double>
-inline Sophus::SE3Group<Scalar> exp_decoupled(
-    const Sophus::SE3Group<Scalar>& a, const Eigen::Matrix<Scalar, 6, 1>& x) {
-  return Sophus::SE3Group<Scalar>(
-      a.so3() * Sophus::SO3Group<Scalar>::exp(x.template tail<3>()),
-      a.translation() + x.template head<3>());
 }
 
 // this function implements d vee(log(A * exp(x) * B)) / dx,which is in R^{6x6}
@@ -383,6 +300,9 @@ inline Eigen::Matrix<Scalar, 6, 6> dLog_decoupled_dX(
   return dLog_decoupled;
 }
 
+// The derivative of the SE3 logarithm (6d) with respect to a
+// transformation (7d) which is parameterized as 3 translation and 4
+// quaternion terms.
 template<typename Scalar = double>
 inline Eigen::Matrix<Scalar, 6, 7> dLog_dSE3(
     const Sophus::SE3Group<Scalar>& t) {

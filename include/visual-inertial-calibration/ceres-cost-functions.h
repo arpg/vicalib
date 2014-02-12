@@ -23,6 +23,17 @@
 
 namespace visual_inertial_calibration {
 
+// Integrates a given pose and velocity using Euler integration, given
+// the derivative k and duration dt
+//
+//     pose - The structure specifying the starting position,
+//     rotation, velocity and timestamp
+//
+//     k - The derivative vector comprising of 3 velocity, 3 SO3
+//     tangent space and 3 acceleration parameters, used to integrate
+//     the position, quaternion and velocity respectively.
+//
+//     dt - The duration of the Euler integration
 template<typename T, typename Scalar>
 static ImuPoseT<T> IntegratePoseJet(const ImuPoseT<T>& pose,
                                     const Eigen::Matrix<T, 9, 1>& k,
@@ -31,18 +42,39 @@ static ImuPoseT<T> IntegratePoseJet(const ImuPoseT<T>& pose,
       Sophus::SO3Group<T>::exp(k.template segment<3>(3) * static_cast<T>(dt)));
 
   ImuPoseT<T> y = pose;
-  y.t_wp.translation() += k.template head<3>() * static_cast<T>(dt);
-  memcpy(
-      y.t_wp.so3().data(),
-      (rv2_v1.unit_quaternion() * pose.t_wp.so3().unit_quaternion()).coeffs()
-      .data(),
-      sizeof(T) * 4);
+  y.t_wp_.translation() += k.template head<3>() * static_cast<T>(dt);
+  const Eigen::Matrix<T, 4, 1> temp =
+      (rv2_v1.unit_quaternion() * pose.t_wp_.so3().unit_quaternion()).coeffs();
+  for (int i = 0; i < 4; ++i) {
+      y.t_wp_.so3().data()[i] = temp.data()[i];
+  }
 
   // Do euler integration for now.
-  y.v_w += k.template tail<3>() * static_cast<T>(dt);
+  y.v_w_ += k.template tail<3>() * static_cast<T>(dt);
   return y;
 }
 
+// Returns the 9d derivative vector used in the IntegratePoseJet
+// function, evaluated at a specific offset between the timestamps of
+// z_start and z_end
+//
+//     pose - The structure specifying the position, rotation and
+//     velocity
+//
+//     t_w - The 3d gravity vector
+//
+//     z_start - The accelerometer and gyroscope readings at the start
+//     of the integration window (contains timestamp)
+//
+//     z_end - The accelerometer and gyroscope readings at the end of
+//     the integration window (contains timestamp)
+//
+//     bg - 3d vector containing gyroscope biases
+//
+//     ba - 3d vector containing accelerometer biases
+//
+//     dt - The time offset between z_start and z_end at which the
+//     derivative is evaluated
 template<typename T, typename Scalar>
 static Eigen::Matrix<T, 9, 1> GetPoseDerivativeJet(
     const ImuPoseT<T>& pose, const Eigen::Matrix<T, 3, 1>& t_w,
@@ -50,26 +82,57 @@ static Eigen::Matrix<T, 9, 1> GetPoseDerivativeJet(
     const Eigen::Matrix<T, 3, 1>& bg, const Eigen::Matrix<T, 3, 1>& ba,
     const Eigen::Matrix<T, 6, 1>& sf, const Scalar dt) {
   double alpha = (z_end.time - (z_tart.time + dt)) / (z_end.time - z_tart.time);
-  Eigen::Matrix<Scalar, 3, 1> zg = z_tart.w * alpha
-      + z_end.w * (1.0 - alpha);
-  Eigen::Matrix<Scalar, 3, 1> za = z_tart.a * alpha
-      + z_end.a * (1.0 - alpha);
+  Eigen::Matrix<Scalar, 3, 1> zg = z_tart.w_ * alpha
+      + z_end.w_ * (1.0 - alpha);
+  Eigen::Matrix<Scalar, 3, 1> za = z_tart.a_ * alpha
+      + z_end.a_ * (1.0 - alpha);
 
   Eigen::Matrix<T, 9, 1> deriv;
   // Derivative of position is velocity.
   // v (velocity)
-  deriv.template head<3>() = pose.v_w;
+  deriv.template head<3>() = pose.v_w_;
 
   // w (angular rates)
-  deriv.template segment<3> (3) = pose.t_wp.so3().Adj()
+  deriv.template segment<3> (3) = pose.t_wp_.so3().Adj()
       * (zg.template cast<T>().cwiseProduct(sf.template head<3>()) + bg);
   // a (acceleration)
-  deriv.template segment<3> (6) = pose.t_wp.so3()
+  deriv.template segment<3> (6) = pose.t_wp_.so3()
       * (za.template cast<T>().cwiseProduct(sf.template tail<3>()) + ba) - t_w;
 
   return deriv;
 }
 
+// Given the start and end imu measurements (which include
+// timestamps), this function integrates the position, rotation and
+// velocities specified in 'pose', using RK45 integration
+//
+//     pose - The structure specifying the starting position,
+//     rotation, velocity and timestamp
+//
+//     z_start - The accelerometer and gyroscope readings at the start
+//     of the integration window (contains timestamp)
+//
+//     z_end - The accelerometer and gyroscope readings at the end of
+//     the integration window (contains timestamp)
+//
+//     bg - 3d vector containing gyroscope biases
+//
+//     ba - 3d vector containing accelerometer biases
+//
+//     sf - 6d vector specifying scale factors for the gyroscope and
+//     accelerometer
+//
+//     g - 3d vector specifying the gravity vector
+//
+//     dy_db - The 10x6 jacobian of the final pose and velocity, with
+//     respect to the biases. The final pose is parameterized as a 10d
+//     vector comprising of 3 translation, 4 quaternion and 3 velocity
+//     parameters.
+//
+//     dy_dy0 - The 10x10 jacobian of the final pose and velocity as a
+//     function of the initial pose and velocity. Both the initial and
+//     final poses are parameterized as a 10d vector comprising of 3
+//     translation, 4 quaternion and 3 velocity parameters.
 template<typename T, typename Scalar>
 static ImuPoseT<T> IntegrateImuJet(
     const ImuPoseT<T>& pose,
@@ -103,11 +166,31 @@ static ImuPoseT<T> IntegrateImuJet(
   k = (k1 + static_cast<T>(2) * k2 + static_cast<T>(2) * k3 + k4);
   ImuPoseT<T> res = IntegratePoseJet<T, Scalar>(pose, k, dt / 6.0);
 
-  res.w_w = k.template segment<3> (3);
-  res.time = z_end.time;
+  res.w_w_ = k.template segment<3> (3);
+  res.time_ = z_end.time;
   return res;
 }
 
+// Integrates the measurements given in the measurement vector,
+// considering the biases, scale factor, gravity vector and starting
+// pose
+//
+//     pose - The structure specifying the starting position,
+//     rotation, velocity and timestamp
+//
+//     measurements - The vector specifying all measurements and their
+//     timestamps used in the integration
+//
+//     bg - 3d vector containing gyroscope biases
+//
+//     ba - 3d vector containing accelerometer biases
+//
+//     sf - 6d vector specifying scale factors for the gyroscope and
+//     accelerometer
+//
+//     g - 3d vector specifying the gravity vector
+//
+//     poses - vector of intermediate poses output by the function
 template<typename T, typename Scalar>
 static ImuPoseT<T> IntegrateResidualJet(
     const PoseT<T>& pose,
@@ -117,21 +200,21 @@ static ImuPoseT<T> IntegrateResidualJet(
     const Eigen::Matrix<T, 3, 1>& ba,
     const Eigen::Matrix<T, 6, 1>& sf,
     const Eigen::Matrix<T, 3, 1>& g,
-    std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > >& poses) {
-  ImuPoseT<T> imu_pose(pose.t_wp, pose.v_w, Eigen::Matrix<T, 3, 1>::Zero(),
-                       pose.time);
+    std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > >* poses) {
+  ImuPoseT<T> imu_pose(pose.t_wp_, pose.v_w_, Eigen::Matrix<T, 3, 1>::Zero(),
+                       pose.time_);
 
   const ImuMeasurementT<Scalar>* prev_meas = 0;
-  poses.clear();
-  poses.reserve(measurements.size() + 1);
-  poses.push_back(imu_pose);
+  poses->clear();
+  poses->reserve(measurements.size() + 1);
+  poses->push_back(imu_pose);
 
   // integrate forward in time, and retain all the poses
   for (const ImuMeasurementT<Scalar>& meas : measurements) {
-    if (prev_meas != 0) {
+    if (prev_meas != NULL) {
       imu_pose = IntegrateImuJet<T, Scalar>(imu_pose, *prev_meas, meas,
                                             bg, ba, sf, g);
-      poses.push_back(imu_pose);
+      poses->push_back(imu_pose);
     }
     prev_meas = &meas;
   }
@@ -152,6 +235,10 @@ struct GlobalPoseCostFunction {
   template<typename T>
   bool operator()(const T* const t_t_ic, const T* const t_t_wi,
                   T* residuals) const {
+    CHECK_NOTNULL(t_t_ic);
+    CHECK_NOTNULL(t_t_wi);
+    CHECK_NOTNULL(residuals);
+
     const Eigen::Map<const Sophus::SE3Group<T> > t_ic(t_t_ic);
     const Eigen::Map<const Sophus::SE3Group<T> > t_wi(t_t_wi);
     // the pose residuals
@@ -222,24 +309,24 @@ struct FullImuCostFunction {
 
     // get the gravity components in 3d based on
     // the 2 angles of the gravity vector
-    const Eigen::Matrix<T, 3, 1> g_vector = GetGravityVector<T>(g);
+    const Eigen::Matrix<T, 3, 1> g_vector = GetGravityVector<T>(g, gravity());
 
     PoseT<T> start_pose;
-    start_pose.t_wp = t_wx1;
-    start_pose.v_w = v1;
-    start_pose.time = measurements.front().Time;
+    start_pose.t_wp_ = t_wx1;
+    start_pose.v_w_ = v1;
+    start_pose.time_ = measurements.front().Time;
     std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > > vPoses;
     ImuPoseT<T> end_pose = IntegrateResidualJet<T, Scalar>(start_pose,
                                                            measurements, bg, ba,
-                                                           g_vector, vPoses);
+                                                           g_vector, &vPoses);
 
     // and now calculate the error with this pose
-    pose_residuals = (end_pose.t_wp * t_wx2.inverse()).log() *
+    pose_residuals = (end_pose.t_wp_ * t_wx2.inverse()).log() *
         static_cast<T>(weight);
 
     // to calculate the velocity error, first augment the IMU integration
     // velocity with gravity and initial velocity
-    vel_residuals = (end_pose.v_w - v2) * static_cast<T>(weight) *
+    vel_residuals = (end_pose.v_w_ - v2) * static_cast<T>(weight) *
         static_cast<T>(0.1);
     return true;
   }
@@ -296,9 +383,9 @@ struct SwitchedFullImuCostFunction {
       Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >& meas,
       const Eigen::Matrix<Scalar, 9, 9>& w_sqrt,
       const bool* res_switch)
-      : measurements(meas),
-        weight_sqrt(w_sqrt),
-        residal_switch(res_switch) {}
+      : measurements_(meas),
+        weight_sqrt_(w_sqrt),
+        residal_switch_(res_switch) {}
 
   template<typename T>
   bool operator()(const T* const _tx2, const T* const _tx1,
@@ -306,6 +393,14 @@ struct SwitchedFullImuCostFunction {
                   const T* const _tg, const T* const _tb,
                   const T* const _tsf,
                   T* residuals) const {
+    CHECK_NOTNULL(_tx2);
+    CHECK_NOTNULL(_tx1);
+    CHECK_NOTNULL(_tvx2);
+    CHECK_NOTNULL(_tvx1);
+    CHECK_NOTNULL(_tg);
+    CHECK_NOTNULL(_tb);
+    CHECK_NOTNULL(_tsf);
+    CHECK_NOTNULL(residuals);
     // the residual vector consists of a 6d pose and a 3d velocity residual
     Eigen::Map<Eigen::Matrix<T, 9, 1> > residuals_vec(residuals);
 
@@ -335,28 +430,29 @@ struct SwitchedFullImuCostFunction {
 
     // get the gravity components in 3d based on the 2
     // angles of the gravity vector
-    const Eigen::Matrix<T, 3, 1> g_vector = GetGravityVector<T>(g);
+    const Eigen::Matrix<T, 3, 1> g_vector =
+        GetGravityVector<T>(g, static_cast<T>(gravity()));
 
     PoseT<T> start_pose;
-    start_pose.t_wp = t_wx1;
-    start_pose.v_w = v1;
-    start_pose.time = measurements.front().time;
+    start_pose.t_wp_ = t_wx1;
+    start_pose.v_w_ = v1;
+    start_pose.time_ = measurements_.front().time;
     std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > > poses;
     ImuPoseT<T> end_pose = IntegrateResidualJet<T, Scalar>(
-        start_pose, measurements, bg, ba, sf, g_vector, poses);
+        start_pose, measurements_, bg, ba, sf, g_vector, &poses);
     // and now calculate the error with this pose
-    residuals_vec.template head<6>() = (end_pose.t_wp * t_wx2.inverse()).log();
+    residuals_vec.template head<6>() = (end_pose.t_wp_ * t_wx2.inverse()).log();
 
     // to calculate the velocity error, first augment the IMU integration
     // velocity with gravity and initial velocity
-    residuals_vec.template tail<3>() = (end_pose.v_w - v2);
+    residuals_vec.template tail<3>() = (end_pose.v_w_ - v2);
 
     // Multiply by the weight matrix, which has been square rooted to be in
     // standard.
     residuals_vec = (residuals_vec.transpose() *
-                     weight_sqrt.template cast<T>()).transpose();
+                     weight_sqrt_.template cast<T>()).transpose();
 
-    if (*residal_switch) {
+    if (*residal_switch_) {
       residuals_vec.template head<3>().setZero();
       residuals_vec.template tail<3>().setZero();
     }
@@ -365,9 +461,9 @@ struct SwitchedFullImuCostFunction {
 
   const std::vector<ImuMeasurementT<Scalar>,
                     Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >
-  measurements;
-  Eigen::Matrix<Scalar, 9, 9> weight_sqrt;
-  const bool* residal_switch;
+  measurements_;
+  Eigen::Matrix<Scalar, 9, 9> weight_sqrt_;
+  const bool* residal_switch_;
 };
 
 }  // namespace visual_inertial_calibration

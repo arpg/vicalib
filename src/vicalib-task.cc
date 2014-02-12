@@ -33,6 +33,15 @@ DEFINE_double(max_poly3_diff_k2, 0.1,
               "Maximum poly3 k2 difference between calibrations.");
 DEFINE_double(max_poly3_diff_k3, 0.1,
               "Maximum poly3 k3 difference between calibrations.");
+DEFINE_double(max_camera_trans_diff, 0.1,
+              "Max Distance between camera's estimated pose for calibrations"
+              " runs.");
+DEFINE_double(max_camera_angle_diff, 0.1, "Maximum angle difference in radians"
+              " along axeses of camera between calibrations.");
+DEFINE_double(max_imu_gyro_diff, 0.1,
+              "Maximum gyroscope bias difference between calibrations.");
+DEFINE_double(max_imu_accel_diff, 0.1,
+              "Maximum accelrometer bias difference between calibrations.");
 
 namespace visual_inertial_calibration {
 
@@ -84,7 +93,6 @@ VicalibTask::VicalibTask(
     calib_frame_(-1),
     tracking_good_(num_streams, false),
     t_cw_(num_streams),
-    stats_(),
     num_frames_(0),
     calibrator_(),
   input_cameras_(input_cameras),
@@ -108,6 +116,7 @@ VicalibTask::VicalibTask(
     conic_finder_[i].Params().conic_min_aspect = 0.2;
   }
   calibrator_.FixCameraIntrinsics(fix_intrinsics);
+  input_imu_biases_ = calibrator_.GetBiases();
 
   for (size_t ii = 0; ii < num_streams; ++ii) {
     const int w_i = width[ii];
@@ -134,8 +143,8 @@ void VicalibTask::SetupGUI() {
   // Setup GUI
   const int panel_width = 150;
   pangolin::CreateWindowAndBind("Main", (NumStreams() + 1) *
-                                width() / 2.0 + panel_width,
-                                height() / 2.0);
+                                width(0) / 2.0 + panel_width,
+                                height(0) / 2.0);
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
   // Make things look prettier...
@@ -166,7 +175,7 @@ void VicalibTask::SetupGUI() {
 
   // Add 3d view, attach input handler_
   pangolin::View& v3d = pangolin::Display("vicalib3d").SetAspect(
-      static_cast<float>(width()) / height()).SetHandler(&handler_);
+      static_cast<float>(width(0)) / height(0)).SetHandler(&handler_);
   container.AddDisplay(v3d);
 
   // 1,2,3,... keys hide and show viewports
@@ -220,8 +229,7 @@ int VicalibTask::AddFrame(double frame_time) {
 void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
-  std::vector<Eigen::Vector2d,
-              Eigen::aligned_allocator<Eigen::Vector2d> > ellipses[n];
+  std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {
       tracking_good_[ii] = false;
@@ -277,7 +285,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
         if (ii == 0 || !tracking_good_[0]) {
           // Initialize pose of frame for least squares optimisation
           // this needs to be T_wh which is why we invert
-          calibrator_.GetFrame(calib_frame_)->t_wp = t_cw_[ii].inverse()
+          calibrator_.GetFrame(calib_frame_)->t_wp_ = t_cw_[ii].inverse()
               * calibrator_.GetCamera(ii).T_ck;
         }
 
@@ -331,11 +339,11 @@ void VicalibTask::Draw3d() {
       // Draw the camera frame if we had measurements from it
       if (calibrator_.GetFrame(k)->has_measurements_from_cam[c]) {
         pangolin::glDrawAxis(
-            (calibrator_.GetFrame(k)->t_wp * t_ck.inverse()).matrix(), 0.01);
+            (calibrator_.GetFrame(k)->t_wp_ * t_ck.inverse()).matrix(), 0.01);
       }
 
       // Draw the IMU frame
-      pangolin::glDrawAxis((calibrator_.GetFrame(k)->t_wp).matrix(), 0.02);
+      pangolin::glDrawAxis((calibrator_.GetFrame(k)->t_wp_).matrix(), 0.02);
 
       glColor4f(1, 1, 1, 1);
       // also draw the imu integration for this pose
@@ -350,10 +358,10 @@ void VicalibTask::Draw3d() {
                           Eigen::aligned_allocator<
                             visual_inertial_calibration::ImuPoseT<double> > >
             poses = calibrator_.GetIntegrationPoses(k);
-        Eigen::Vector3dAlignedVec v3d_poses;
+        Vector3dAlignedVec v3d_poses;
         v3d_poses.reserve(poses.size());
         for (const auto& p : poses) {
-          v3d_poses.push_back((p.t_wp).translation());
+          v3d_poses.push_back((p.t_wp_).translation());
         }
         imu_strips_[k]->SetPointsFromTrajectory(v3d_poses);
         imu_strips_[k]->Draw();
@@ -541,8 +549,23 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
   }
 }
 
-bool CalibrationsDiffer(const CameraAndPose& last,
-                        const CameraAndPose& current) {
+/**
+ * Name: CameraCalibrationsDiffer
+ *  @args
+ *    const CameraAndPose &last:    This will represent previously guessed or
+ *                                  estimated parameteres(i.e. Intrinsic and
+ *                                  Extrinsics).
+ *    const CameraAndPose &current: This will represent parameters estimated in
+ *                                  current run.
+ *
+ *  @return
+ *    bool: Return parameter is true if any of the parameter values for last and
+ *    current vary more than specified threshold. If all are close to expected
+ *    value than it returns false, which is a successful run.
+ **/
+bool CameraCalibrationsDiffer(const CameraAndPose& last,
+                         const CameraAndPose& current) {
+  // First comparing intrinsics of the camera.
   if (last.camera.Type() != current.camera.Type()) {
     LOG(ERROR) << "Camera calibrations are different types: "
                << last.camera.Type() << " vs. "
@@ -593,6 +616,67 @@ bool CalibrationsDiffer(const CameraAndPose& last,
     }
   }
 
+  // Now, coparison for extrinsics will start.
+  // First, comparison of psoition of camera. Comparison here is done by
+  // calculating distance as that requires user to specify only one threshold.
+  Eigen::Vector3d lastTrans = last.T_ck.translation();
+  Eigen::Vector3d currentTrans = current.T_ck.translation();
+  Eigen::Vector3d squareCurrentToLast = (lastTrans - currentTrans);
+  double dist = squareCurrentToLast.norm();
+  if (dist > FLAGS_max_camera_trans_diff) {
+    LOG(ERROR) << "Position of camera differs by " << dist
+               << "more than expected ("
+               << FLAGS_max_camera_trans_diff << ").";
+    return true;
+  }
+
+  // Second, comparison for orientation is done.
+  // Both inverse of old is multiplied with the new estimate this whould result
+  // in and Identity matrix, ideally. Angles along x,y,z are computed with the
+  // new rotation matrix and then compared with threshold.
+  Sophus::SO3d rot_diff = last.T_ck.so3().inverse() * current.T_ck.so3();
+  Eigen::Matrix3d mat_rot_diff = rot_diff.matrix();
+
+  float angle_x = atan2(mat_rot_diff(2, 1), mat_rot_diff(2, 2));
+  float root_square_elem = std::sqrt(mat_rot_diff(2, 1) * mat_rot_diff(2, 1) +
+                                     mat_rot_diff(2, 2) * mat_rot_diff(2, 2));
+  float angle_y = atan2(-1 * mat_rot_diff(2, 0), root_square_elem);
+  float angle_z = atan2(mat_rot_diff(1, 0), mat_rot_diff(0, 0));
+
+  if (abs(angle_x) > FLAGS_max_camera_angle_diff ||
+     abs(angle_y) > FLAGS_max_camera_angle_diff ||
+     abs(angle_z) > FLAGS_max_camera_angle_diff) {
+    LOG(ERROR) << "Camera orientations are farther apart than expected"
+              << " (" << FLAGS_max_camera_angle_diff << ")."
+              << " Difference along x,y,z axis is: "
+              << angle_x << ", " << angle_y << ", " << angle_z;
+    return true;
+  }
+
+  return false;
+}
+
+bool IMUCalibrationDiffer(const Vector6d &last,
+                          const Vector6d &current) {
+  Vector6d diff = last - current;
+
+  if (abs(diff(0)) < FLAGS_max_imu_gyro_diff ||
+     abs(diff(1)) < FLAGS_max_imu_gyro_diff ||
+     abs(diff(2)) < FLAGS_max_imu_gyro_diff ) {
+    LOG(ERROR) << "IMU bias(es) for gyroscope differ ("
+              << diff(0) << ", " << diff(1) << ", " << diff(2)
+              << " ) more than expected (" << FLAGS_max_imu_gyro_diff << ")";
+    return true;
+  }
+
+  if (abs(diff(3)) < FLAGS_max_imu_accel_diff ||
+     abs(diff(4)) < FLAGS_max_imu_accel_diff ||
+     abs(diff(5)) < FLAGS_max_imu_accel_diff ) {
+    LOG(ERROR) << "IMU bias(es) for accelrometer differ ("
+              << diff(3) << ", " << diff(4) << ", " << diff(5)
+              << " ) more than expected (" << FLAGS_max_imu_accel_diff << ")";
+    return true;
+  }
   return false;
 }
 
@@ -612,10 +696,13 @@ bool VicalibTask::IsSuccessful() const {
   // run if we initialized our optimization with it
   if (FLAGS_has_initial_guess) {
     for (size_t i = 0; i < input_cameras_.size(); ++i) {
-      if (CalibrationsDiffer(input_cameras_[i], calibrator_.GetCamera(i))) {
+      if (CameraCalibrationsDiffer(input_cameras_[i],
+                                   calibrator_.GetCamera(i))) {
         return false;
       }
     }
+    if (IMUCalibrationDiffer(input_imu_biases_, calibrator_.GetBiases()))
+      return false;
   }
   return true;
 }

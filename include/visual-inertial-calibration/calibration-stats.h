@@ -9,6 +9,7 @@
 
 namespace visual_inertial_calibration {
 
+// A structure to capture the on-going calibration processing details.
 struct CalibrationStats {
   enum CalibrationStatus {
     StatusInactive,

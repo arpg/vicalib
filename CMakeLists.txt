@@ -15,6 +15,7 @@ endif()
 
 find_package(Calibu QUIET)
 find_package(Ceres QUIET)
+find_package(CVars QUIET)
 find_package(GFlags QUIET)
 find_package(GLog QUIET)
 find_package(HAL QUIET)
@@ -25,6 +26,7 @@ include_directories(
   ${Pangolin_INCLUDE_DIRS}
   ${HAL_INCLUDE_DIRS}
   ${Calibu_INCLUDE_DIRS}
+  ${CVARS_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
   ${GFLAGS_INCLUDE_DIRS}
@@ -52,6 +54,7 @@ def_executable(vicalib
   DEPENDS hal pangolin calibu pbmsgs
   LINK_LIBS
   ${CERES_LIBRARIES}
+  ${CVARS_LIBRARY}
   ${GFLAGS_LIBRARIES}
   ${GLOG_LIBRARIES}
   ${OpenCV2_LIBRARIES}

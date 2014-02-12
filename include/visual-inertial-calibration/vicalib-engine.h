@@ -33,6 +33,7 @@ enum StaticThresholdPreset {
 
 class VicalibTask;
 
+// Handles input and configuration of the visual-inertial calibration process.
 class VicalibEngine {
  public:
   VicalibEngine(const std::function<void()>& stop_sensors_callback,
