@@ -57,8 +57,8 @@ class VicalibTask {
   VicalibTask(size_t num_cameras,
               const std::vector<size_t>& width,
               const std::vector<size_t>& height,
-              int grid_seed,
-              double gspacing, const Eigen::Vector2i& grid_size,
+              double gspacing,
+              const Eigen::MatrixXi& grid,
               bool fix_intrinsics,
               const aligned_vector<CameraAndPose>& input_cameras,
               const std::vector<double>& max_reproj_errors);

@@ -7,11 +7,13 @@
 
 #include <calibu/cam/CameraXml.h>
 #include <calibu/cam/CameraModelT.h>
+#include <calibu/target/RandomGrid.h>
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
 #include <PbMsgs/Matrix.h>
 
 #include <visual-inertial-calibration/eigen-alignment.h>
+#include <visual-inertial-calibration/grid-definitions.h>
 #include <visual-inertial-calibration/vicalib-task.h>
 #include <visual-inertial-calibration/vicalib-engine.h>
 #include <visual-inertial-calibration/vicalibrator.h>
@@ -78,7 +80,6 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
                              const std::function<void(
                                  const std::shared_ptr<CalibrationStats>&)>&
                              update_stats_callback) :
-    calibrating_(false),
     frames_skipped_(0),
     stop_sensors_callback_(stop_sensors_callback),
     update_stats_callback_(update_stats_callback),
@@ -155,23 +156,26 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
   Vector6d biases(Vector6d::Zero());
   Vector6d scale_factors(Vector6d::Ones());
-  Eigen::Vector2i grid_size(FLAGS_grid_width, FLAGS_grid_height);
   double grid_spacing = FLAGS_grid_spacing;
 
+  Eigen::MatrixXi grid;
   if (FLAGS_use_grid_preset) {
     switch (FLAGS_grid_preset) {
       case GridPresetGWUSmall:
-        grid_size = {19, 10};
+        grid = GWUSmallGrid();
         grid_spacing = 0.254 / 18;  // meters
         break;
       case GridPresetGoogleLarge:
-        grid_size = {25, 36};
+        grid = GoogleLargeGrid();
         grid_spacing = 0.03156;  // meters
         break;
       default:
         LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
         break;
     }
+  } else {
+    grid = calibu::MakePattern(
+        FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
   }
 
   if (FLAGS_use_static_threshold_preset) {
@@ -195,7 +199,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                                  FLAGS_max_reprojection_error);
   std::shared_ptr<VicalibTask> task(
       new VicalibTask(camera_->NumChannels(), widths, heights,
-                      FLAGS_grid_seed, grid_spacing, grid_size,
+                      grid_spacing, grid,
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
