@@ -124,7 +124,8 @@ class ViCalibrator : public ceres::IterationCallback {
         biases_(Vector6d::Zero()),
         scale_factors_(Vector6d::Ones()),
         imu_loss_func_(100),
-        num_imu_residuals_(0) {
+        num_imu_residuals_(0),
+        optimize_time_offset_(true) {
     prob_options_.cost_function_ownership = ceres::DO_NOT_TAKE_OWNERSHIP;
     prob_options_.local_parameterization_ownership =
         ceres::DO_NOT_TAKE_OWNERSHIP;
@@ -186,14 +187,16 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Externally adjust which parts of the optimization are active.
-  void SetOptimizationFlags(const bool bias_active = false,
-                            const bool inertial_active = false,
-                            const bool rotation_only = true) {
+  void SetOptimizationFlags(bool bias_active,
+                            bool inertial_active,
+                            bool rotation_only,
+                            bool optimize_imu_time_offset) {
     CHECK(!is_running_);
     is_scale_factor_active_ = bias_active;
     is_bias_active_ = bias_active;
     is_inertial_active_ = inertial_active;
     optimize_rotation_only_ = rotation_only;
+    optimize_time_offset_ = optimize_imu_time_offset;
   }
 
   // Start optimization thread to modify intrinsic / extrinsic parameters.
@@ -583,13 +586,18 @@ class ViCalibrator : public ceres::IterationCallback {
 
       // only do this once
       if (!is_bias_active_) {
-        LOG(INFO) << "Setting bias terms to constant... " << std::endl;
+        LOG(INFO) << "Setting bias terms to constant... ";
         problem->SetParameterBlockConstant(biases_.data());
       }
 
       if (!is_scale_factor_active_) {
-        LOG(INFO) << "Setting scale factor terms to constant... " << std::endl;
+        LOG(INFO) << "Setting scale factor terms to constant... ";
         problem->SetParameterBlockConstant(scale_factors_.data());
+      }
+
+      if (!optimize_time_offset_) {
+        LOG(INFO) << "Setting time offset term to constant...";
+        problem->SetParameterBlockConstant(&imu_.time_offset_);
       }
     }
     pthread_mutex_unlock(&update_mutex_);
@@ -929,6 +937,7 @@ class ViCalibrator : public ceres::IterationCallback {
   bool is_finished_;
   bool is_gravity_initialized_;
   double mse_;
+  bool optimize_time_offset_;
 };
 }  // namespace visual_inertial_calibration
 #endif  // VISUAL_INERTIAL_CALIBRATION_VICALIBRATOR_H_
