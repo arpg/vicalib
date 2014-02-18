@@ -59,7 +59,7 @@ struct PoseT {
   bool is_active_;
   unsigned int id_;
   unsigned int opt_id_;
-  double time_;
+  Scalar time_;
   std::vector<int> proj_residuals_;
   std::vector<int> inertial_residuals_;
   std::vector<int> binary_residuals_;
@@ -118,12 +118,13 @@ struct ImuCalibrationT {
         g_(g),
         g_vec_(GetGravityVector(g, gravity())),
         r_((Eigen::Matrix<Scalar, 6, 1>() <<
-           IMU_GYRO_UNCERTAINTY,
-           IMU_GYRO_UNCERTAINTY,
-           IMU_GYRO_UNCERTAINTY,
-           IMU_ACCEL_UNCERTAINTY,
-           IMU_ACCEL_UNCERTAINTY,
-           IMU_ACCEL_UNCERTAINTY).finished().asDiagonal()) {
+            IMU_GYRO_UNCERTAINTY,
+            IMU_GYRO_UNCERTAINTY,
+            IMU_GYRO_UNCERTAINTY,
+            IMU_ACCEL_UNCERTAINTY,
+            IMU_ACCEL_UNCERTAINTY,
+            IMU_ACCEL_UNCERTAINTY).finished().asDiagonal()),
+        time_offset_(0) {
   }
 
   /// \brief Calibration from vehicle to sensor frame (monocular for now)
@@ -143,6 +144,10 @@ struct ImuCalibrationT {
   /// \brief Sensor uncertainty. The first 3 rows/cols are gyroscope
   /// and the last are accel
   Eigen::Matrix<Scalar, 6, 6> r_;
+
+  /// \brief Time offset (seconds) from images to IMU timestamp
+  /// e.g. imu.time = image.time + time_offset_;
+  Scalar time_offset_;
 };
 
 template<typename Scalar>
@@ -176,10 +181,11 @@ struct ImuPoseT {
 
   ImuPoseT(const Sophus::SE3Group<Scalar>& twp,
            const Eigen::Matrix<Scalar, 3, 1>& v,
-           const Eigen::Matrix<Scalar, 3, 1>& w, double time)
+           const Eigen::Matrix<Scalar, 3, 1>& w,
+           const Scalar& time)
       : t_wp_(twp), v_w_(v), w_w_(w), time_(time) { }
 
-  operator Eigen::Matrix<Scalar, 10, 1>() {
+  operator Eigen::Matrix<Scalar, 10, 1>() const {
     Eigen::Matrix<Scalar, 10, 1> res;
     res.template head<3>() = t_wp_.translation();
     res.template segment<4>(3) = t_wp_.unit_quaternion().coeffs();
@@ -197,32 +203,53 @@ struct ImuPoseT {
   Eigen::Matrix<Scalar, 3, 1> w_w_;
 
   /// \brief time in seconds
-  double time_;
+  Scalar time_;
 };
 
 // Timestamped IMU measurements at a single timestamp.
-template<typename Scalar = double>
+template<typename Scalar>
 struct ImuMeasurementT {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   ImuMeasurementT() {}
   ImuMeasurementT(const Eigen::Matrix<Scalar, 3, 1>& w,
-                  const Eigen::Matrix<Scalar, 3, 1>& a, double time)
-      : w_(w), a_(a), time(time) { }
+                  const Eigen::Matrix<Scalar, 3, 1>& a,
+                  Scalar time)
+      : w_(w), a_(a), time(time) {}
 
-  /// \brief angular rates in inertial coordinates
-  Eigen::Matrix<Scalar, 3, 1> w_;
-  /// \brief accelerations in inertial coordinates
-  Eigen::Matrix<Scalar, 3, 1> a_;
-  double time;
+  template <typename T>
+  ImuMeasurementT(const ImuMeasurementT<T>& other)
+      : w_(other.w_.template cast<Scalar>()),
+        a_(other.a_.template cast<Scalar>()),
+        time(other.time) {}
 
-  ImuMeasurementT operator*(const Scalar &rhs) {
+  template <typename T>
+  ImuMeasurementT& operator=(const ImuMeasurementT<T>& other) {
+    w_ = other.w_.template cast<Scalar>();
+    a_ = other.a_.template cast<Scalar>();
+    time = static_cast<Scalar>(other.time);
+    return *this;
+  }
+
+  ImuMeasurementT(const ImuMeasurementT&) = default;
+  ImuMeasurementT& operator=(const ImuMeasurementT&) = default;
+
+  ImuMeasurementT operator*(const Scalar &rhs) const {
     return ImuMeasurementT(w_ * rhs, a_ * rhs, time);
   }
 
-  ImuMeasurementT operator+(const ImuMeasurementT &rhs) {
+  ImuMeasurementT operator+(const ImuMeasurementT &rhs) const {
     return ImuMeasurementT(w_ + rhs.w_, a_ + rhs.a_, time);
   }
+
+  /// \brief angular rates in inertial coordinates
+  Eigen::Matrix<Scalar, 3, 1> w_;
+
+  /// \brief accelerations in inertial coordinates
+  Eigen::Matrix<Scalar, 3, 1> a_;
+
+  /// \brief Timestamp for this measurement
+  Scalar time;
 };
 
 // Base type for optimization residuals.
@@ -280,7 +307,8 @@ struct ProjectionResidualT : public ResidualT<Scalar, 6> {
 };
 
 // Optimization error storage for the IMU.
-template<typename Scalar = double, int ResidualSize = 15, int PoseSize = 15>
+template<typename Timestamp, typename Scalar = double,
+         int ResidualSize = 15, int PoseSize = 15>
 struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
@@ -351,7 +379,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
   static Eigen::Matrix<Scalar, 9, 1> GetPoseDerivative(
       const ImuPose& pose, const Eigen::Matrix<Scalar, 3, 1>& g_w,
-      const ImuMeasurement& z_start, const ImuMeasurement& z_end,
+      const ImuMeasurement& z_start,
+      const ImuMeasurement& z_end,
       const Eigen::Matrix<Scalar, 3, 1>& bg,
       const Eigen::Matrix<Scalar, 3, 1>& ba,
       const Eigen::Matrix<Scalar, 6, 1>& sf,
@@ -662,7 +691,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
   static bool _Test_IntegrateImu_BiasJacobian(
       const ImuPose& pose, const ImuMeasurement& prev_meas,
-      const ImuMeasurement& meas, const Eigen::Matrix<Scalar, 3, 1>& bg,
+      const ImuMeasurement& meas,
+      const Eigen::Matrix<Scalar, 3, 1>& bg,
       const Eigen::Matrix<Scalar, 3, 1>& ba,
       const Eigen::Matrix<Scalar, 3, 1>& g,
       const Eigen::Matrix<Scalar, 10, 6>& dpose_db) {
@@ -717,7 +747,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
   static bool _Test_IntegrateImu_StateJacobian(
       const ImuPose& pose, const ImuMeasurement& prev_meas,
-      const ImuMeasurement& meas, const Eigen::Matrix<Scalar, 3, 1>& bg,
+      const ImuMeasurement& meas,
+      const Eigen::Matrix<Scalar, 3, 1>& bg,
       const Eigen::Matrix<Scalar, 3, 1>& ba,
       const Eigen::Matrix<Scalar, 3, 1>& g,
       const Eigen::Matrix<Scalar, 10, 10>& dpose_dpose) {
@@ -918,7 +949,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
   static bool _Test_IntegrateImu_KBiasJacobian(
       const ImuPose& pose, const ImuMeasurement& z_start,
-      const ImuMeasurement& z_end, const Eigen::Matrix<Scalar, 3, 1>& bg,
+      const ImuMeasurement& z_end,
+      const Eigen::Matrix<Scalar, 3, 1>& bg,
       const Eigen::Matrix<Scalar, 3, 1>& ba,
       const Eigen::Matrix<Scalar, 3, 1>& g,
       const Eigen::Matrix<Scalar, 9, 6>& dk_db) {
@@ -959,7 +991,8 @@ struct ImuResidualT : public ResidualT<Scalar, PoseSize> {
 
   static bool _Test_IntegrateImu_KStateJacobian(
       const ImuPose& pose, const ImuMeasurement& z_start,
-      const ImuMeasurement& z_end, const Eigen::Matrix<Scalar, 3, 1>& bg,
+      const ImuMeasurement& z_end,
+      const Eigen::Matrix<Scalar, 3, 1>& bg,
       const Eigen::Matrix<Scalar, 3, 1>& ba,
       const Eigen::Matrix<Scalar, 3, 1>& g,
       const Eigen::Matrix<Scalar, 9, 10>& dk_dy) {

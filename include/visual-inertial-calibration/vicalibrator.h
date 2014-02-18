@@ -440,7 +440,8 @@ class ViCalibrator : public ceres::IterationCallback {
 
         // get all the imu measurements between the two poses
         aligned_vector<ImuMeasurementT<double> > measurements;
-        imu_buffer_.GetRange(prev_pose.time_, pose.time_, &measurements);
+        imu_buffer_.GetRange(prev_pose.time_, pose.time_, imu_.time_offset_,
+                             &measurements);
 
         if (!measurements.empty()) {
           visual_inertial_calibration::ImuResidualT<double>::IntegrateResidual(
@@ -530,37 +531,33 @@ class ViCalibrator : public ceres::IterationCallback {
         // get all the imu measurements between these two poses, and add
         // them to a vector
         if (jj > 0) {
-          aligned_vector<ImuMeasurementT<double> > measurements;
-          imu_buffer_.GetRange(t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-                               &measurements);
+          ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
 
-          if (!measurements.empty()) {
-            ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
+          std::shared_ptr<ViFullCost> cost_functor(
+              new ViFullCost(
+                  &imu_buffer_,
+                  t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+                  Eigen::Matrix<double, 9, 9>::Identity()* 500,
+                  &optimize_rotation_only_));
 
-            std::shared_ptr<ViFullCost> cost_functor(
-                new ViFullCost(
-                    measurements,
-                    Eigen::Matrix<double, 9, 9>::Identity()* 500,
-                    &optimize_rotation_only_));
+          cost->Cost() =
+              new ceres::AutoDiffCostFunction<
+                ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
 
-            cost->Cost() =
-                new ceres::AutoDiffCostFunction<
-                  ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6>(cost_functor.get());
+          cost->Loss() = &imu_loss_func_;
 
-            cost->Loss() = &imu_loss_func_;
+          cost->set_index(jj-1);
+          cost->set_cost_functor(cost_functor);
 
-            cost->set_index(jj-1);
-            cost->set_cost_functor(cost_functor);
+          cost->Params() = std::vector<double*> {
+            t_wk_[jj]->t_wp_.data(),
+            t_wk_[jj - 1]->t_wp_.data(), t_wk_[jj]->v_w_.data(),
+            t_wk_[jj - 1]->v_w_.data(), imu_.g_.data(), biases_.data(),
+            scale_factors_.data(), &imu_.time_offset_
+          };
 
-            cost->Params() = std::vector<double*> {
-              t_wk_[jj]->t_wp_.data(),
-              t_wk_[jj - 1]->t_wp_.data(), t_wk_[jj]->v_w_.data(),
-              t_wk_[jj - 1]->v_w_.data(), imu_.g_.data(), biases_.data(),
-              scale_factors_.data()};
-
-            imu_costs_.push_back(
-                std::unique_ptr<ImuCostFunctionAndParams>(cost));
-          }
+          imu_costs_.push_back(
+              std::unique_ptr<ImuCostFunctionAndParams>(cost));
         }
         ++num_imu_residuals_;
       }
@@ -654,6 +651,9 @@ class ViCalibrator : public ceres::IterationCallback {
     if (is_inertial_active_ && !optimize_rotation_only_) {
       for (size_t ii = 0; ii < imu_costs_.size() ; ++ii) {
         std::unique_ptr<ImuCostFunctionAndParams>& cost = imu_costs_[ii];
+        aligned_vector<ImuMeasurementT<double> > measurements;
+        cost->cost_functor()->GetMeasurements(imu_.time_offset_, &measurements);
+
         // To propagate covariances, cast to double in order to stop
         // auto-diff on the covariance matrix.
         PoseT<double> start_pose;
@@ -661,7 +661,7 @@ class ViCalibrator : public ceres::IterationCallback {
         start_pose.t_wp_ = t_wk_[cost->index()]->t_wp_;
         start_pose.v_w_ = t_wk_[cost->index()]->v_w_;
         start_pose.time_ =
-            cost->cost_functor()->measurements_.front().time;
+            measurements.front().time;
         aligned_vector<ImuPoseT<double> > poses_d;
         Eigen::Matrix<double, 10, 6> jb_q;
         Eigen::Matrix<double, 10, 10> c_imu_pose;
@@ -670,7 +670,7 @@ class ViCalibrator : public ceres::IterationCallback {
         ImuPoseT<double> imu_pose =
             ImuResidualT<double>::IntegrateResidual(
                 ImuPoseT<double>(start_pose),
-                cost->cost_functor()->measurements_,
+                measurements,
                 biases_.head<3>(), biases_.tail<3>(),
                 scale_factors_,
                 GetGravityVector(imu_.g_, gravity()), poses_d,
@@ -876,6 +876,7 @@ class ViCalibrator : public ceres::IterationCallback {
             LOG(INFO) << "bw_ba= " << biases_.transpose() << std::endl;
             LOG(INFO) << "sfw_sfa= " << scale_factors_.transpose() << std::endl;
             LOG(INFO) << "G= " << imu_.g_.transpose() << std::endl;
+            LOG(INFO) << "ts= " << imu_.time_offset_ << std::endl;
             break;
           }
         } catch(const std::exception& e) {
@@ -913,8 +914,7 @@ class ViCalibrator : public ceres::IterationCallback {
   ceres::LossFunctionWrapper loss_func_;
   LocalParamSe3 local_param_se3_;
   LocalParamSo3 local_param_so3_;
-  InterpolationBufferT<
-    ImuMeasurementT<double>, double> imu_buffer_;
+  InterpolationBufferT<ImuMeasurementT, double> imu_buffer_;
   ImuCalibrationT<double> imu_;
   Vector6d biases_;
   Vector6d scale_factors_;

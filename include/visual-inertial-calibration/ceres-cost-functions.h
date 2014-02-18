@@ -34,10 +34,10 @@ namespace visual_inertial_calibration {
 //     the position, quaternion and velocity respectively.
 //
 //     dt - The duration of the Euler integration
-template<typename T, typename Scalar>
+template<typename T>
 static ImuPoseT<T> IntegratePoseJet(const ImuPoseT<T>& pose,
                                     const Eigen::Matrix<T, 9, 1>& k,
-                                    const Scalar dt) {
+                                    const T& dt) {
   const Sophus::SO3Group<T> rv2_v1(
       Sophus::SO3Group<T>::exp(k.template segment<3>(3) * static_cast<T>(dt)));
 
@@ -75,16 +75,17 @@ static ImuPoseT<T> IntegratePoseJet(const ImuPoseT<T>& pose,
 //
 //     dt - The time offset between z_start and z_end at which the
 //     derivative is evaluated
-template<typename T, typename Scalar>
+template<typename T>
 static Eigen::Matrix<T, 9, 1> GetPoseDerivativeJet(
     const ImuPoseT<T>& pose, const Eigen::Matrix<T, 3, 1>& t_w,
-    const ImuMeasurementT<Scalar>& z_tart, const ImuMeasurementT<Scalar>& z_end,
+    const ImuMeasurementT<T>& z_start,
+    const ImuMeasurementT<T>& z_end,
     const Eigen::Matrix<T, 3, 1>& bg, const Eigen::Matrix<T, 3, 1>& ba,
-    const Eigen::Matrix<T, 6, 1>& sf, const Scalar dt) {
-  double alpha = (z_end.time - (z_tart.time + dt)) / (z_end.time - z_tart.time);
-  Eigen::Matrix<Scalar, 3, 1> zg = z_tart.w_ * alpha
+    const Eigen::Matrix<T, 6, 1>& sf, const T dt) {
+  T alpha = (z_end.time - (z_start.time + dt)) / (z_end.time - z_start.time);
+  Eigen::Matrix<T, 3, 1> zg = z_start.w_ * alpha
       + z_end.w_ * (1.0 - alpha);
-  Eigen::Matrix<Scalar, 3, 1> za = z_tart.a_ * alpha
+  Eigen::Matrix<T, 3, 1> za = z_start.a_ * alpha
       + z_end.a_ * (1.0 - alpha);
 
   Eigen::Matrix<T, 9, 1> deriv;
@@ -133,41 +134,44 @@ static Eigen::Matrix<T, 9, 1> GetPoseDerivativeJet(
 //     function of the initial pose and velocity. Both the initial and
 //     final poses are parameterized as a 10d vector comprising of 3
 //     translation, 4 quaternion and 3 velocity parameters.
-template<typename T, typename Scalar>
+template<typename T>
 static ImuPoseT<T> IntegrateImuJet(
     const ImuPoseT<T>& pose,
-    const ImuMeasurementT<Scalar>& z_start,
-    const ImuMeasurementT<Scalar>& z_end,
+    const ImuMeasurementT<T>& z_start,
+    const ImuMeasurementT<T>& z_end,
     const Eigen::Matrix<T, 3, 1>& bg,
     const Eigen::Matrix<T, 3, 1>& ba,
     const Eigen::Matrix<T, 6, 1>& sf,
     const Eigen::Matrix<T, 3, 1>& g,
-    Eigen::Matrix<Scalar, 10, 6>* /* dy_db */ = 0,
-    Eigen::Matrix<Scalar, 10, 10>* /*dy_dy0*/ = 0) {
+    Eigen::Matrix<T, 10, 6>* /* dy_db */ = 0,
+    Eigen::Matrix<T, 10, 10>* /*dy_dy0*/ = 0) {
   // construct the state matrix
-  Scalar dt = z_end.time - z_start.time;
-  if (dt == 0) {
+  if (z_end.time == z_start.time) {
     return pose;
   }
 
+  T dt = z_end.time - z_start.time;
+
   Eigen::Matrix<T, 9, 1> k;
-  const Eigen::Matrix<T, 9, 1> k1 = GetPoseDerivativeJet<T, Scalar>(
-      pose, g, z_start, z_end, bg, ba, sf, 0);
-  const ImuPoseT<T> y1 = IntegratePoseJet<T, Scalar>(pose, k1, dt * 0.5);
-  const Eigen::Matrix<T, 9, 1> k2 = GetPoseDerivativeJet<T, Scalar>(
-      y1, g, z_start, z_end, bg, ba, sf, dt / 2);
-  const ImuPoseT<T> y2 = IntegratePoseJet<T, Scalar>(pose, k2, dt * 0.5);
-  const Eigen::Matrix<T, 9, 1> k3 = GetPoseDerivativeJet<T, Scalar>(
-      y2, g, z_start, z_end, bg, ba, sf, dt / 2);
-  const ImuPoseT<T> y3 = IntegratePoseJet<T, Scalar>(pose, k3, dt);
-  const Eigen::Matrix<T, 9, 1> k4 = GetPoseDerivativeJet<T, Scalar>(
+  const Eigen::Matrix<T, 9, 1> k1 = GetPoseDerivativeJet<T>(
+      pose, g, z_start, z_end, bg, ba, sf, static_cast<T>(0));
+  const ImuPoseT<T> y1 = IntegratePoseJet<T>(
+      pose, k1, dt * static_cast<T>(0.5));
+  const Eigen::Matrix<T, 9, 1> k2 = GetPoseDerivativeJet<T>(
+      y1, g, z_start, z_end, bg, ba, sf, dt / static_cast<T>(2));
+  const ImuPoseT<T> y2 = IntegratePoseJet<T>(pose, k2,
+                                             dt * static_cast<T>(0.5));
+  const Eigen::Matrix<T, 9, 1> k3 = GetPoseDerivativeJet<T>(
+      y2, g, z_start, z_end, bg, ba, sf, dt / static_cast<T>(2));
+  const ImuPoseT<T> y3 = IntegratePoseJet<T>(pose, k3, dt);
+  const Eigen::Matrix<T, 9, 1> k4 = GetPoseDerivativeJet<T>(
       y3, g, z_start, z_end, bg, ba, sf, dt);
 
   k = (k1 + static_cast<T>(2) * k2 + static_cast<T>(2) * k3 + k4);
-  ImuPoseT<T> res = IntegratePoseJet<T, Scalar>(pose, k, dt / 6.0);
+  ImuPoseT<T> res = IntegratePoseJet<T>(pose, k, dt / static_cast<T>(6.0));
 
   res.w_w_ = k.template segment<3> (3);
-  res.time_ = z_end.time;
+  res.time_ = static_cast<T>(z_end.time);
   return res;
 }
 
@@ -191,11 +195,10 @@ static ImuPoseT<T> IntegrateImuJet(
 //     g - 3d vector specifying the gravity vector
 //
 //     poses - vector of intermediate poses output by the function
-template<typename T, typename Scalar>
+template<typename T>
 static ImuPoseT<T> IntegrateResidualJet(
     const PoseT<T>& pose,
-    const std::vector<ImuMeasurementT<Scalar>,
-    Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >& measurements,
+    const aligned_vector<ImuMeasurementT<T> >& measurements,
     const Eigen::Matrix<T, 3, 1>& bg,
     const Eigen::Matrix<T, 3, 1>& ba,
     const Eigen::Matrix<T, 6, 1>& sf,
@@ -204,15 +207,15 @@ static ImuPoseT<T> IntegrateResidualJet(
   ImuPoseT<T> imu_pose(pose.t_wp_, pose.v_w_, Eigen::Matrix<T, 3, 1>::Zero(),
                        pose.time_);
 
-  const ImuMeasurementT<Scalar>* prev_meas = 0;
+  const ImuMeasurementT<T>* prev_meas = 0;
   poses->clear();
   poses->reserve(measurements.size() + 1);
   poses->push_back(imu_pose);
 
   // integrate forward in time, and retain all the poses
-  for (const ImuMeasurementT<Scalar>& meas : measurements) {
+  for (const ImuMeasurementT<T>& meas : measurements) {
     if (prev_meas != NULL) {
-      imu_pose = IntegrateImuJet<T, Scalar>(imu_pose, *prev_meas, meas,
+      imu_pose = IntegrateImuJet<T>(imu_pose, *prev_meas, meas,
                                             bg, ba, sf, g);
       poses->push_back(imu_pose);
     }
@@ -316,7 +319,7 @@ struct FullImuCostFunction {
     start_pose.v_w_ = v1;
     start_pose.time_ = measurements.front().Time;
     std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > > vPoses;
-    ImuPoseT<T> end_pose = IntegrateResidualJet<T, Scalar>(start_pose,
+    ImuPoseT<T> end_pose = IntegrateResidualJet<T>(start_pose,
                                                            measurements, bg, ba,
                                                            g_vector, &vPoses);
 
@@ -331,9 +334,7 @@ struct FullImuCostFunction {
     return true;
   }
 
-  const std::vector<ImuMeasurementT<Scalar>,
-                    Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >
-  measurements;
+  const aligned_vector<ImuMeasurementT<Scalar> > measurements;
   const double weight;
 };
 
@@ -379,19 +380,31 @@ struct ImuReprojectionCostFunctor {
 template<typename Scalar = double>
 struct SwitchedFullImuCostFunction {
   SwitchedFullImuCostFunction(
-      const std::vector<ImuMeasurementT<Scalar>,
-      Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >& meas,
+      const InterpolationBufferT<ImuMeasurementT, Scalar>* imu_buffer,
+      Scalar start_time, Scalar end_time,
       const Eigen::Matrix<Scalar, 9, 9>& w_sqrt,
       const bool* res_switch)
-      : measurements_(meas),
+      : start_time_(start_time), end_time_(end_time),
+        imu_buffer_(imu_buffer),
         weight_sqrt_(w_sqrt),
         residal_switch_(res_switch) {}
+
+  /** Get the measurements with a given time offset */
+  template <typename T>
+  void GetMeasurements(
+      const T& time_offset,
+      aligned_vector<ImuMeasurementT<T> >* measurements) const {
+    imu_buffer_->GetRange(start_time_,
+                          end_time_,
+                          time_offset,
+                          measurements);
+  }
 
   template<typename T>
   bool operator()(const T* const _tx2, const T* const _tx1,
                   const T* const _tvx2, const T* const _tvx1,
                   const T* const _tg, const T* const _tb,
-                  const T* const _tsf,
+                  const T* const _tsf, const T* const _ttime_offset,
                   T* residuals) const {
     CHECK_NOTNULL(_tx2);
     CHECK_NOTNULL(_tx1);
@@ -400,6 +413,7 @@ struct SwitchedFullImuCostFunction {
     CHECK_NOTNULL(_tg);
     CHECK_NOTNULL(_tb);
     CHECK_NOTNULL(_tsf);
+    CHECK_NOTNULL(_ttime_offset);
     CHECK_NOTNULL(residuals);
     // the residual vector consists of a 6d pose and a 3d velocity residual
     Eigen::Map<Eigen::Matrix<T, 9, 1> > residuals_vec(residuals);
@@ -433,13 +447,19 @@ struct SwitchedFullImuCostFunction {
     const Eigen::Matrix<T, 3, 1> g_vector =
         GetGravityVector<T>(g, static_cast<T>(gravity()));
 
+    aligned_vector<ImuMeasurementT<T> > measurements;
+    GetMeasurements(*_ttime_offset, &measurements);
+
+    CHECK_GT(measurements.size(), 0)
+        << "IMU measurements required for cost function calculation.";
+
     PoseT<T> start_pose;
     start_pose.t_wp_ = t_wx1;
     start_pose.v_w_ = v1;
-    start_pose.time_ = measurements_.front().time;
+    start_pose.time_ = measurements.front().time;
     std::vector<ImuPoseT<T>, Eigen::aligned_allocator<ImuPoseT<T> > > poses;
-    ImuPoseT<T> end_pose = IntegrateResidualJet<T, Scalar>(
-        start_pose, measurements_, bg, ba, sf, g_vector, &poses);
+    ImuPoseT<T> end_pose = IntegrateResidualJet<T>(
+        start_pose, measurements, bg, ba, sf, g_vector, &poses);
     // and now calculate the error with this pose
     residuals_vec.template head<6>() = (end_pose.t_wp_ * t_wx2.inverse()).log();
 
@@ -459,9 +479,8 @@ struct SwitchedFullImuCostFunction {
     return true;
   }
 
-  const std::vector<ImuMeasurementT<Scalar>,
-                    Eigen::aligned_allocator<ImuMeasurementT<Scalar> > >
-  measurements_;
+  Scalar start_time_, end_time_;
+  const InterpolationBufferT<ImuMeasurementT, Scalar>* imu_buffer_;
   Eigen::Matrix<Scalar, 9, 9> weight_sqrt_;
   const bool* residal_switch_;
 };
