@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <Eigen/Core>
+
 template <template<typename ...> class ContainerT, typename T, typename ...Args>
 using aligned = ContainerT<T, Args..., Eigen::aligned_allocator<T> >;
 

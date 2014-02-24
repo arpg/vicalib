@@ -236,11 +236,11 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
-    pb::Image img = images_->at(ii);
-    image_processing_[ii].Process(img.data(),
-                                  img.Width(),
-                                  img.Height(),
-                                  img.Width());
+    std::shared_ptr<pb::Image> img = images_->at(ii);
+    image_processing_[ii].Process(img->data(),
+                                  img->Width(),
+                                  img->Height(),
+                                  img->Width());
     conic_finder_[ii].Find(image_processing_[ii]);
 
     const std::vector<calibu::Conic,
@@ -434,9 +434,9 @@ void VicalibTask::Draw2d() {
           Eigen::Vector2d pt;
           pt = cap.camera.Project(t_cw_[c] * xwp);
           if (pt[0] < kImageBoundaryRegion ||
-              pt[0] >= images_->at(c).Width() - kImageBoundaryRegion ||
+              pt[0] >= images_->at(c)->Width() - kImageBoundaryRegion ||
               pt[1] < kImageBoundaryRegion ||
-              pt[1] >= images_->at(c).Height() - kImageBoundaryRegion) {
+              pt[1] >= images_->at(c)->Height() - kImageBoundaryRegion) {
             found = false;
             continue;
           }
@@ -507,10 +507,11 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
-    LOG(INFO) << std::fixed << images_->at(ii).Timestamp();
-    if (images_->at(ii).Timestamp() != frame_times_[ii]) {
+    std::shared_ptr<pb::Image> image = images_->at(ii);
+    LOG(INFO) << std::fixed << image->Timestamp();
+    if (image->Timestamp() != frame_times_[ii]) {
       num_new_frames++;
-      frame_times_[ii] = images_->at(ii).Timestamp();
+      frame_times_[ii] = image->Timestamp();
       valid_frames[ii] = true;
     } else {
       valid_frames[ii] = false;
