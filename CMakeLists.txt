@@ -15,7 +15,7 @@ endif()
 
 find_package(Calibu QUIET)
 find_package(Ceres QUIET)
-find_package(CVars QUIET)
+find_package(CVARS QUIET)
 find_package(GFlags QUIET)
 find_package(GLog QUIET)
 find_package(HAL QUIET)
