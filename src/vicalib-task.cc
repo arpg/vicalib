@@ -644,9 +644,9 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
   float angle_y = atan2(-1 * mat_rot_diff(2, 0), root_square_elem);
   float angle_z = atan2(mat_rot_diff(1, 0), mat_rot_diff(0, 0));
 
-  if (abs(angle_x) > FLAGS_max_camera_angle_diff ||
-     abs(angle_y) > FLAGS_max_camera_angle_diff ||
-     abs(angle_z) > FLAGS_max_camera_angle_diff) {
+  if (std::abs(angle_x) > FLAGS_max_camera_angle_diff ||
+      std::abs(angle_y) > FLAGS_max_camera_angle_diff ||
+      std::abs(angle_z) > FLAGS_max_camera_angle_diff) {
     LOG(ERROR) << "Camera orientations are farther apart than expected"
               << " (" << FLAGS_max_camera_angle_diff << ")."
               << " Difference along x,y,z axis is: "
@@ -661,18 +661,18 @@ bool IMUCalibrationDiffer(const Vector6d &last,
                           const Vector6d &current) {
   Vector6d diff = last - current;
 
-  if (abs(diff(0)) < FLAGS_max_imu_gyro_diff ||
-     abs(diff(1)) < FLAGS_max_imu_gyro_diff ||
-     abs(diff(2)) < FLAGS_max_imu_gyro_diff ) {
+  if (std::abs(diff(0)) < FLAGS_max_imu_gyro_diff ||
+      std::abs(diff(1)) < FLAGS_max_imu_gyro_diff ||
+      std::abs(diff(2)) < FLAGS_max_imu_gyro_diff ) {
     LOG(ERROR) << "IMU bias(es) for gyroscope differ ("
               << diff(0) << ", " << diff(1) << ", " << diff(2)
               << " ) more than expected (" << FLAGS_max_imu_gyro_diff << ")";
     return true;
   }
 
-  if (abs(diff(3)) < FLAGS_max_imu_accel_diff ||
-     abs(diff(4)) < FLAGS_max_imu_accel_diff ||
-     abs(diff(5)) < FLAGS_max_imu_accel_diff ) {
+  if (std::abs(diff(3)) < FLAGS_max_imu_accel_diff ||
+      std::abs(diff(4)) < FLAGS_max_imu_accel_diff ||
+      std::abs(diff(5)) < FLAGS_max_imu_accel_diff ) {
     LOG(ERROR) << "IMU bias(es) for accelrometer differ ("
               << diff(3) << ", " << diff(4) << ", " << diff(5)
               << " ) more than expected (" << FLAGS_max_imu_accel_diff << ")";
