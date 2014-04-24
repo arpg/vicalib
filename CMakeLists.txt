@@ -49,15 +49,18 @@ set(VICALIB_SRCS
   src/vicalib-engine.cc
   src/vicalib-task.cc
   )
-def_executable(vicalib
-  SOURCES ${VICALIB_SRCS} ${VICALIB_HDRS}
-  DEPENDS hal pangolin calibu pbmsgs
-  LINK_LIBS
-  ${CERES_LIBRARIES}
-  ${CVARS_LIBRARY}
-  ${GFLAGS_LIBRARIES}
-  ${GLOG_LIBRARIES}
-  ${OpenCV2_LIBRARIES}
-  ${PbMsgs_LIBRARIES}
-  CONDITIONS Calibu_FOUND Ceres_FOUND GFLAGS_FOUND GLOG_FOUND HAL_FOUND OpenCV2_FOUND Pangolin_FOUND
-  )
+
+if(NOT ANDROID)
+  def_executable(vicalib
+    SOURCES ${VICALIB_SRCS} ${VICALIB_HDRS}
+    DEPENDS hal pangolin calibu pbmsgs
+    LINK_LIBS
+    ${CERES_LIBRARIES}
+    ${CVARS_LIBRARY}
+    ${GFLAGS_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    ${OpenCV2_LIBRARIES}
+    ${PbMsgs_LIBRARIES}
+    CONDITIONS Calibu_FOUND Ceres_FOUND GFLAGS_FOUND GLOG_FOUND HAL_FOUND OpenCV2_FOUND Pangolin_FOUND
+    )
+endif()
