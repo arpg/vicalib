@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <Eigen/Eigen>
+#include <Eigen/StdVector>
 #include <glog/logging.h>
 #include <sophus/se3.hpp>
 

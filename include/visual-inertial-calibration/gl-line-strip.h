@@ -19,6 +19,7 @@
 
 #include <pangolin/gl.h>
 #include <vector>
+#include <Eigen/StdVector>
 
 namespace visual_inertial_calibration {
 

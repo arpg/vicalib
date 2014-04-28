@@ -19,6 +19,7 @@
 #define VISUAL_INERTIAL_CALIBRATION_CERES_COST_FUNCTIONS_H_
 
 #include <vector>
+#include <Eigen/StdVector>
 #include <visual-inertial-calibration/types.h>
 
 namespace visual_inertial_calibration {
