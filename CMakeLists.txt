@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project(visual_inertial_calibration)
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
+
 include(def_executable)
 
 if (ANDROID)
@@ -13,14 +15,18 @@ else()
   add_definitions(-UBUILD_GUI)
 endif()
 
-find_package(Calibu QUIET)
-find_package(Ceres QUIET)
-find_package(CVARS QUIET)
-find_package(GFlags QUIET)
-find_package(GLog QUIET)
-find_package(HAL QUIET)
-find_package(OpenCV2 QUIET)
-find_package(Pangolin QUIET)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wall -Wextra -Wno-unused-parameter -Wno-deprecated")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+
+find_package(Calibu)
+find_package(Ceres)
+find_package(CVARS)
+find_package(GFlags)
+find_package(GLog)
+find_package(HAL)
+find_package(OpenCV2)
+find_package(Pangolin)
+find_package(MINIGLOG)
 
 include_directories(
   ${Pangolin_INCLUDE_DIRS}
@@ -30,6 +36,7 @@ include_directories(
   ${GLOG_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
   ${GFLAGS_INCLUDE_DIRS}
+  ${MINIGLOG_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(VICALIB_HDRS
@@ -50,10 +57,21 @@ set(VICALIB_SRCS
   src/vicalib-task.cc
   )
 
+set(VICALIB_CONDITIONS
+  Calibu_FOUND
+  Ceres_FOUND
+  GFLAGS_FOUND
+  GLOG_FOUND
+  HAL_FOUND
+  OpenCV2_FOUND
+  Pangolin_FOUND
+  MINIGLOG_FOUND
+  )
+
 if(NOT ANDROID)
   def_executable(vicalib
     SOURCES ${VICALIB_SRCS} ${VICALIB_HDRS}
-    DEPENDS hal pangolin calibu pbmsgs
+    DEPENDS hal pangolin calibu pbmsgs miniglog
     LINK_LIBS
     ${CERES_LIBRARIES}
     ${CVARS_LIBRARY}
@@ -61,6 +79,7 @@ if(NOT ANDROID)
     ${GLOG_LIBRARIES}
     ${OpenCV2_LIBRARIES}
     ${PbMsgs_LIBRARIES}
-    CONDITIONS Calibu_FOUND Ceres_FOUND GFLAGS_FOUND GLOG_FOUND HAL_FOUND OpenCV2_FOUND Pangolin_FOUND
+    ${MINIGLOG_LIBRARIES}
+    CONDITIONS ${VICALIB_CONDITIONS}
     )
 endif()
