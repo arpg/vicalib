@@ -836,7 +836,7 @@ class ViCalibrator : public ceres::IterationCallback {
             double cost;
             problem_->Evaluate(options, &cost, nullptr, nullptr, nullptr);
             camera_proj_rmse_[ii] =
-                sqrt(cost / (projection_residuals_[ii].size() * 2));
+                sqrt(cost / (projection_residuals_[ii].size()));
 
             LOG(INFO) << "Reprojection error for camera " << ii << ": "
                       << sqrt(cost) << " rmse: " << camera_proj_rmse_[ii]
