@@ -26,6 +26,7 @@ find_package(GLog)
 find_package(HAL)
 find_package(OpenCV2)
 find_package(Pangolin)
+find_package(PbMsgs)
 find_package(MINIGLOG)
 
 include_directories(

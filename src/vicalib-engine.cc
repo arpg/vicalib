@@ -25,6 +25,8 @@ static const int64_t kCalibrateAllPossibleFrames = -1;
 DEFINE_bool(paused, false, "Start video paused");
 #endif
 
+DEFINE_bool(calibrate_imu, true,
+            "Calibrate the IMU in addition to the camera.");
 DEFINE_bool(calibrate_intrinsics, true,
             "Calibrate the camera intrinsics as well as the extrinsics.");
 DEFINE_string(device_serial, "-1", "Serial number of device.");

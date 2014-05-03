@@ -51,6 +51,7 @@
 #include <visual-inertial-calibration/ceres-cost-functions.h>
 
 DECLARE_string(output_log_file);
+DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 
 namespace visual_inertial_calibration {
 
@@ -578,7 +579,7 @@ class ViCalibrator : public ceres::IterationCallback {
       }
     }
 
-    if (is_inertial_active_) {
+    if (FLAGS_calibrate_imu && is_inertial_active_) {
       for (size_t kk = 0; kk < imu_costs_.size(); ++kk) {
         calibu::CostFunctionAndParams& cost = *imu_costs_[kk];
         problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params());
