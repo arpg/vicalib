@@ -382,9 +382,9 @@ void VicalibTask::Draw3d() {
 }
 
 void VicalibTask::Draw2d() {
+  pangolin::View& container = pangolin::Display("vicalib");
+  container.ActivateScissorAndClear();
   for (size_t c = 0; c < calibrator_.NumCameras(); ++c) {
-    pangolin::View& container = pangolin::Display("vicalib");
-    container.ActivateScissorAndClear();
     if (container[c].IsShown()) {
       container[c].ActivateScissorAndClear();
       glColor3f(1, 1, 1);
