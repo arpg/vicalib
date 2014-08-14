@@ -141,6 +141,7 @@ VicalibTask::~VicalibTask() { }
 
 void VicalibTask::SetupGUI() {
 #ifdef HAVE_PANGOLIN
+  LOG(INFO) << "Setting up GUI for " << NumStreams() << " streams.";
   // Setup GUI
   const int panel_width = 150;
   pangolin::CreateWindowAndBind("Main", (NumStreams() + 1) *
@@ -235,6 +236,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {
+      LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
       continue;
     }
@@ -255,6 +257,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
                                                 conics,
                                                 ellipse_target__map);
     if (!tracking_good_[ii]) {
+      LOG(WARNING) << "Tracking bad for " << ii;
       continue;
     }
 
