@@ -4,6 +4,7 @@
 #include <time.h>
 #include <thread>
 #include <functional>
+#include <unistd.h>
 
 #include <calibu/cam/CameraXml.h>
 #include <calibu/cam/CameraModelT.h>
@@ -228,6 +229,7 @@ void VicalibEngine::WriteCalibration() {
 }
 
 void VicalibEngine::CalibrateAndDrawLoop() {
+  LOG(INFO) << "Entering calibration loop.";
   if (!vicalib_->IsRunning()) {
     vicalib_->Start(FLAGS_has_initial_guess);
   }
@@ -288,7 +290,7 @@ bool VicalibEngine::CameraLoop() {
   std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
   bool captured = camera_->Capture(*images);
   bool should_use = true;
-  if (FLAGS_use_only_when_static) {
+  if (FLAGS_use_only_when_static && FLAGS_calibrate_imu) {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
