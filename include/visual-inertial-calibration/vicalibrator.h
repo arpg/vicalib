@@ -846,7 +846,8 @@ class ViCalibrator : public ceres::IterationCallback {
           LOG(INFO) << summary.FullReport() << std::endl;
 
           mse_ = summary.final_cost / summary.num_residuals;
-          if (summary.termination_type != ceres::NO_CONVERGENCE) {
+          if (summary.termination_type != ceres::NO_CONVERGENCE &&
+               FLAGS_calibrate_imu) {
             if (!is_inertial_active_) {
               is_inertial_active_ = true;
               LOG(INFO) << "Activating inertial terms. Optimizing rotation "
@@ -887,6 +888,8 @@ class ViCalibrator : public ceres::IterationCallback {
             LOG(INFO) << "G= " << imu_.g_.transpose() << std::endl;
             LOG(INFO) << "ts= " << imu_.time_offset_ << std::endl;
             break;
+          } else if (summary.termination_type != ceres::NO_CONVERGENCE) {
+            is_finished_ = true;
           }
         } catch(const std::exception& e) {
           LOG(WARNING) << e.what() << std::endl;
