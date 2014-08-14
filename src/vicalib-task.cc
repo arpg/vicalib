@@ -530,7 +530,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   if (is_new_frame) {
     current_frame_time_ = frame_times_[0];
-    LOG(INFO) << "Adding super frame at time " << current_frame_time_;
+    LOG(INFO) << "Adding frame at time " << current_frame_time_;
 
     AddImageMeasurements(valid_frames);
   } else if (!is_new_frame) {
