@@ -141,6 +141,7 @@ VicalibTask::~VicalibTask() { }
 
 void VicalibTask::SetupGUI() {
 #ifdef HAVE_PANGOLIN
+  LOG(INFO) << "Setting up GUI for " << NumStreams() << " streams.";
   // Setup GUI
   const int panel_width = 150;
   pangolin::CreateWindowAndBind("Main", (NumStreams() + 1) *
@@ -235,6 +236,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {
+      LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
       continue;
     }
@@ -255,6 +257,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
                                                 conics,
                                                 ellipse_target__map);
     if (!tracking_good_[ii]) {
+      LOG(WARNING) << "Tracking bad for " << ii;
       continue;
     }
 
@@ -382,9 +385,9 @@ void VicalibTask::Draw3d() {
 }
 
 void VicalibTask::Draw2d() {
+  pangolin::View& container = pangolin::Display("vicalib");
+  container.ActivateScissorAndClear();
   for (size_t c = 0; c < calibrator_.NumCameras(); ++c) {
-    pangolin::View& container = pangolin::Display("vicalib");
-    container.ActivateScissorAndClear();
     if (container[c].IsShown()) {
       container[c].ActivateScissorAndClear();
       glColor3f(1, 1, 1);
@@ -509,13 +512,16 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   std::vector<bool> valid_frames;
   valid_frames.resize(images_->Size());
 
+
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
     std::shared_ptr<pb::Image> image = images_->at(ii);
-    LOG(INFO) << std::fixed << image->Timestamp();
-    if (image->Timestamp() != frame_times_[ii]) {
+    const double timestamp = image->Timestamp() == 0 ? images->Timestamp() :
+                                                       image->Timestamp();
+    LOG(INFO) << std::fixed << timestamp;
+    if (timestamp != frame_times_[ii]) {
       num_new_frames++;
-      frame_times_[ii] = image->Timestamp();
+      frame_times_[ii] = timestamp;
       valid_frames[ii] = true;
     } else {
       valid_frames[ii] = false;
@@ -527,7 +533,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   if (is_new_frame) {
     current_frame_time_ = frame_times_[0];
-    LOG(INFO) << "Adding super frame at time " << current_frame_time_;
+    LOG(INFO) << "Adding frame at time " << current_frame_time_;
 
     AddImageMeasurements(valid_frames);
   } else if (!is_new_frame) {
