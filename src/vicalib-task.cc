@@ -512,13 +512,16 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   std::vector<bool> valid_frames;
   valid_frames.resize(images_->Size());
 
+
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
     std::shared_ptr<pb::Image> image = images_->at(ii);
-    LOG(INFO) << std::fixed << image->Timestamp();
-    if (image->Timestamp() != frame_times_[ii]) {
+    const double timestamp = image->Timestamp() == 0 ? images->Timestamp() :
+                                                       image->Timestamp();
+    LOG(INFO) << std::fixed << timestamp;
+    if (timestamp != frame_times_[ii]) {
       num_new_frames++;
-      frame_times_[ii] = image->Timestamp();
+      frame_times_[ii] = timestamp;
       valid_frames[ii] = true;
     } else {
       valid_frames[ii] = false;
