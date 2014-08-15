@@ -290,7 +290,7 @@ bool VicalibEngine::CameraLoop() {
   std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
   bool captured = camera_->Capture(*images);
   bool should_use = true;
-  if (FLAGS_use_only_when_static && FLAGS_calibrate_imu) {
+  if (FLAGS_use_only_when_static) {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
