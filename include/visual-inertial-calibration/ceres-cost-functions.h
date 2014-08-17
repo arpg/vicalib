@@ -345,7 +345,6 @@ struct ImuReprojectionCostFunctor {
                              const Eigen::Vector2d& pc)
       : p_w(pw),
         p_c(pc) {
-    t_vr = (calibu::RdfVision * calibu::RdfRobotics.inverse());
   }
 
   template<typename T>
@@ -375,7 +374,6 @@ struct ImuReprojectionCostFunctor {
 
   Eigen::Vector3d p_w;
   Eigen::Vector2d p_c;
-  Sophus::SO3d t_vr;
 };
 
 template<typename Scalar = double>
