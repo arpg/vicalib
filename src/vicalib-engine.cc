@@ -63,7 +63,7 @@ DEFINE_int32(static_threshold_preset,
              "Which grid preset to use. "
              "Must be a visual_inertial_calibration::StaticThresholdPreset.");
 DEFINE_bool(use_grid_preset, false, "Use one of the predefined grid sizes.");
-DEFINE_bool(use_only_when_static, true, "Only use frames where the device is "
+DEFINE_bool(use_only_when_static, false, "Only use frames where the device is "
             "stationary.");
 DEFINE_bool(use_static_threshold_preset, false,
             "Use one of the predefined static thresholds.");
