@@ -466,6 +466,7 @@ class ViCalibrator : public ceres::IterationCallback {
     for (size_t c = 0; c < cameras_.size(); ++c) {
       LOG(INFO) << "Camera: " << c << std::endl;
       LOG(INFO) << cameras_[c]->camera.GenericParams().transpose() << std::endl;
+      LOG(INFO) << cameras_[c]->T_ck.matrix();
       LOG(INFO) << std::endl;
     }
   }
