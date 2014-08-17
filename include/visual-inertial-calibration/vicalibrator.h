@@ -159,10 +159,19 @@ class ViCalibrator : public ceres::IterationCallback {
     for (size_t c = 0; c < cameras_.size(); ++c) {
       // Rdfrobotics.inverse is multiplied so that T_ck does not bake
       // the robotics (imu) to vision coordinate transform d
-      rig.Add(cameras_[c]->camera,
-              cameras_[c]->T_ck.inverse() *
-              Sophus::SE3d(calibu::RdfRobotics.inverse(),
-                           Eigen::Vector3d::Zero()));
+      if (FLAGS_calibrate_imu) {
+        cameras_[c]->camera.SetRDF(calibu::RdfRobotics.matrix());
+        rig.Add(cameras_[c]->camera,
+                cameras_[c]->T_ck.inverse() *
+                Sophus::SE3d(calibu::RdfRobotics.inverse(),
+                             Eigen::Vector3d::Zero()));
+      } else {
+        // The RDF must be set to identity (computer vision).
+        cameras_[c]->camera.SetRDF(calibu::RdfVision.matrix());
+
+        rig.Add(cameras_[c]->camera,
+                cameras_[c]->T_ck.inverse());
+      }
     }
 
     WriteXmlRig(filename, rig);
