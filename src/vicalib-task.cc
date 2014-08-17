@@ -376,6 +376,10 @@ void VicalibTask::Draw3d() {
 
     // Draw current camera
     if (tracking_good_[c]) {
+      if (calibrator_.IsRunning()) {
+        t_cw_[c] = calibrator_.GetCamera(c).T_ck *
+            calibrator_.GetFrame(calibrator_.NumFrames() - 1)->t_wp_.inverse();
+      }
       pangolin::glColorBin(c, 2, 0.5);
       pangolin::glDrawFrustrum(k_inv, width(c), height(c),
                                t_cw_[c].inverse().matrix(),
