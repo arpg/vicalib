@@ -52,6 +52,7 @@ class VicalibEngine {
   void WriteCalibration();
   void CalibrateAndDrawLoop();
   bool SeenEnough() const;
+  void CreateGrid();
 
  private:
   std::shared_ptr<VicalibTask> vicalib_;
@@ -64,6 +65,8 @@ class VicalibEngine {
   std::unique_ptr<hal::Camera> camera_;
   std::unique_ptr<hal::IMU> imu_;
   BoxcarFilter<Eigen::Vector3d> gyro_filter_, accel_filter_;
+  Eigen::MatrixXi grid_;
+  double grid_spacing_;
 };
 }  // namespace visual_inertial_calibration
 #endif  // VISUAL_INERTIAL_CALIBRATION_VICALIB_ENGINE_H_
