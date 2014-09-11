@@ -84,7 +84,7 @@ VicalibTask::VicalibTask(
     conic_finder_(num_streams),
     target_(num_streams,
             calibu::TargetGridDot(grid_spacing, grid)),
-    grid_size_(grid.rows(), grid.cols()),
+    grid_size_(grid.cols(), grid.rows()),
     grid_spacing_(grid_spacing),
     calib_cams_(num_streams, 0),
     frame_times_(num_streams, 0),
