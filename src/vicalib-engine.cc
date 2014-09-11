@@ -21,6 +21,7 @@
 #include <visual-inertial-calibration/calibration-stats.h>
 
 static const int64_t kCalibrateAllPossibleFrames = -1;
+static const int kNoGridPreset = -1;
 
 #ifdef BUILD_GUI
 DEFINE_bool(paused, false, "Start video paused");
@@ -41,9 +42,10 @@ DEFINE_double(grid_spacing, 0.01355/*0.254 / (19 - 1) meters */,
 DEFINE_int32(grid_seed, 71, "seed used to generate the grid.");
 DEFINE_bool(has_initial_guess, false,
             "Whether or not the given calibration file has a valid guess.");
-DEFINE_int32(grid_preset, -1,
+DEFINE_int32(grid_preset, kNoGridPreset,
              "Which grid preset to use. "
-             "Must be a visual_inertial_calibration::GridPreset.");
+             "Must be a visual_inertial_calibration::GridPreset. "
+             "0 for small GWU grid, 1 for large Google grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -279,7 +281,7 @@ void VicalibEngine::CreateGrid() {
       small_rad = 0.00635;
       break;
     default:
-      if (FLAGS_grid_preset >= 0) {
+      if (FLAGS_grid_preset != kNoGridPreset) {
         LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
         break;
       } else {
