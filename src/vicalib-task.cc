@@ -17,6 +17,7 @@
 
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 DECLARE_bool(has_initial_guess);  // Defined in vicalib-engine.cc.
+DECLARE_string(imu);              // Defined in vicalib-engine.cc.
 DEFINE_bool(find_time_offset, true,
             "Optimize for the time offset between the IMU and images");
 DEFINE_double(function_tolerance, 1e-6,
@@ -83,7 +84,7 @@ VicalibTask::VicalibTask(
     conic_finder_(num_streams),
     target_(num_streams,
             calibu::TargetGridDot(grid_spacing, grid)),
-    grid_size_(grid.rows(), grid.cols()),
+    grid_size_(grid.cols(), grid.rows()),
     grid_spacing_(grid_spacing),
     calib_cams_(num_streams, 0),
     frame_times_(num_streams, 0),
@@ -213,7 +214,8 @@ void VicalibTask::SetupGUI() {
 
 void VicalibTask::Start(const bool has_initial_guess) {
   calibrator_.SetOptimizationFlags(has_initial_guess,
-                                   has_initial_guess && FLAGS_calibrate_imu,
+                                   has_initial_guess && FLAGS_calibrate_imu
+                                   && !FLAGS_imu.empty(),
                                    !has_initial_guess,
                                    FLAGS_find_time_offset);
   calibrator_.SetFunctionTolerance(FLAGS_function_tolerance);

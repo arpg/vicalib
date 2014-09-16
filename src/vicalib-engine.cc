@@ -21,6 +21,7 @@
 #include <visual-inertial-calibration/calibration-stats.h>
 
 static const int64_t kCalibrateAllPossibleFrames = -1;
+static const int kNoGridPreset = -1;
 
 #ifdef BUILD_GUI
 DEFINE_bool(paused, false, "Start video paused");
@@ -37,13 +38,14 @@ DEFINE_int32(frame_skip, 0, "Number of frames to skip between constraints.");
 DEFINE_int32(grid_height, 10, "Height of grid in circles.");
 DEFINE_int32(grid_width, 19, "Width of grid in circles.");
 DEFINE_double(grid_spacing, 0.01355/*0.254 / (19 - 1) meters */,
-              "Distance between circles on grid.");
+              "Distance between circles on grid (m).");
 DEFINE_int32(grid_seed, 71, "seed used to generate the grid.");
 DEFINE_bool(has_initial_guess, false,
             "Whether or not the given calibration file has a valid guess.");
-DEFINE_int32(grid_preset, visual_inertial_calibration::GridPresetGWUSmall,
+DEFINE_int32(grid_preset, kNoGridPreset,
              "Which grid preset to use. "
-             "Must be a visual_inertial_calibration::GridPreset.");
+             "Must be a visual_inertial_calibration::GridPreset. "
+             "0 for small GWU grid, 1 for large Google grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -62,7 +64,6 @@ DEFINE_int32(static_threshold_preset,
              visual_inertial_calibration::StaticThresholdManual,
              "Which grid preset to use. "
              "Must be a visual_inertial_calibration::StaticThresholdPreset.");
-DEFINE_bool(use_grid_preset, false, "Use one of the predefined grid sizes.");
 DEFINE_bool(use_only_when_static, false, "Only use frames where the device is "
             "stationary.");
 DEFINE_bool(use_static_threshold_preset, false,
@@ -72,6 +73,12 @@ DEFINE_string(imu, "", "IMU URI (if available)");
 DEFINE_string(models, "",
               "Comma-separated list of camera models to calibrate. "
               "Must be in channel order.");
+DEFINE_string(output_pattern_file, "",
+              "Output EPS file to save the calibration pattern.");
+DEFINE_double(grid_large_rad, 0.00423,
+              "Radius of large dots (m) (necessary to save the EPS pattern).");
+DEFINE_double(grid_small_rad, 0.00283,
+              "Radius of large dots (m) (necessary to save the EPS pattern).");
 
 namespace visual_inertial_calibration {
 
@@ -89,13 +96,15 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
     sensors_finished_(false),
     gyro_filter_(10, FLAGS_static_gyro_threshold),
     accel_filter_(10, FLAGS_static_accel_threshold) {
-  CHECK(!FLAGS_cam.empty());
-  try {
-    camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
-  } catch (...) {
-    LOG(ERROR) << "Could not create camera from URI: " << FLAGS_cam;
+  //CHECK(!FLAGS_cam.empty());
+  if (!FLAGS_cam.empty()) {
+    try {
+      camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
+    } catch (...) {
+      LOG(ERROR) << "Could not create camera from URI: " << FLAGS_cam;
+    }
+    stats_.reset(new CalibrationStats(camera_->NumChannels()));
   }
-  stats_.reset(new CalibrationStats(camera_->NumChannels()));
 
   if (!FLAGS_imu.empty()) {
     try {
@@ -128,8 +137,10 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     model_strings.push_back(item);
   }
 
-  CHECK_EQ(model_strings.size(), camera_->NumChannels())
-      << "Must declare a model for every camera channel";
+  if (model_strings.size() < camera_->NumChannels()) {
+    LOG(INFO) << "No model declared for all the camera channels, assuming FOV";
+    model_strings.resize(camera_->NumChannels(), "fov");
+  }
 
   aligned_vector<CameraAndPose> input_cameras;
   for (size_t i = 0; i < model_strings.size(); ++i) {
@@ -159,27 +170,6 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
   Vector6d biases(Vector6d::Zero());
   Vector6d scale_factors(Vector6d::Ones());
-  double grid_spacing = FLAGS_grid_spacing;
-
-  Eigen::MatrixXi grid;
-  if (FLAGS_use_grid_preset) {
-    switch (FLAGS_grid_preset) {
-      case GridPresetGWUSmall:
-        grid = GWUSmallGrid();
-        grid_spacing = 0.254 / 18;  // meters
-        break;
-      case GridPresetGoogleLarge:
-        grid = GoogleLargeGrid();
-        grid_spacing = 0.03156;  // meters
-        break;
-      default:
-        LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
-        break;
-    }
-  } else {
-    grid = calibu::MakePattern(
-        FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-  }
 
   if (FLAGS_use_static_threshold_preset) {
     switch (FLAGS_static_threshold_preset) {
@@ -202,7 +192,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                                  FLAGS_max_reprojection_error);
   std::shared_ptr<VicalibTask> task(
       new VicalibTask(camera_->NumChannels(), widths, heights,
-                      grid_spacing, grid,
+                      grid_spacing_, grid_,
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
@@ -265,9 +255,49 @@ void VicalibEngine::CalibrateAndDrawLoop() {
 }
 
 void VicalibEngine::Run() {
+  CreateGrid();
+  if(!camera_) LOG(FATAL) << "No camera URI given";
   while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
   CalibrateAndDrawLoop();
+}
+
+void VicalibEngine::CreateGrid() {
+  double large_rad = FLAGS_grid_large_rad;
+  double small_rad = FLAGS_grid_small_rad;
+  grid_spacing_ = FLAGS_grid_spacing;
+
+  switch (FLAGS_grid_preset) {
+    case GridPresetGWUSmall:
+      grid_ = GWUSmallGrid();
+      grid_spacing_ = 0.254 / 18;  // meters
+      large_rad = 0.00423;
+      small_rad = 0.00283;
+      break;
+    case GridPresetGoogleLarge:
+      grid_ = GoogleLargeGrid();
+      grid_spacing_ = 0.03156;  // meters
+      large_rad = 0.00889;
+      small_rad = 0.00635;
+      break;
+    default:
+      if (FLAGS_grid_preset != kNoGridPreset) {
+        LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
+        break;
+      } else {
+        grid_ = calibu::MakePattern(
+            FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
+      }
+  }
+
+  if (!FLAGS_output_pattern_file.empty()) {
+    const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
+    const Eigen::Vector2d offset(0,0);
+    calibu::TargetGridDot(grid_spacing_, grid_).
+        SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
+                pts_per_unit);
+    LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
+  }
 }
 
 bool VicalibEngine::CameraLoop() {
