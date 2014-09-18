@@ -74,11 +74,11 @@ DEFINE_string(models, "",
               "Comma-separated list of camera models to calibrate. "
               "Must be in channel order.");
 DEFINE_string(output_pattern_file, "",
-              "Output EPS file to save the calibration pattern.");
+              "Output EPS or SVG file to save the calibration pattern.");
 DEFINE_double(grid_large_rad, 0.00423,
-              "Radius of large dots (m) (necessary to save the EPS pattern).");
+              "Radius of large dots (m) (necessary to save the pattern).");
 DEFINE_double(grid_small_rad, 0.00283,
-              "Radius of large dots (m) (necessary to save the EPS pattern).");
+              "Radius of large dots (m) (necessary to save the pattern).");
 
 namespace visual_inertial_calibration {
 
@@ -291,11 +291,25 @@ void VicalibEngine::CreateGrid() {
   }
 
   if (!FLAGS_output_pattern_file.empty()) {
-    const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
-    const Eigen::Vector2d offset(0,0);
-    calibu::TargetGridDot(grid_spacing_, grid_).
-        SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
-                pts_per_unit);
+    // eps or svg?
+    std::string::size_type p = FLAGS_output_pattern_file.find_last_of('.');
+    bool eps =  (p != std::string::npos &&
+        (FLAGS_output_pattern_file[p+1] == 'e' ||
+        FLAGS_output_pattern_file[p+1] == 'E') &&
+        (FLAGS_output_pattern_file[p+2] == 'p' ||
+        FLAGS_output_pattern_file[p+2] == 'P') &&
+        (FLAGS_output_pattern_file[p+3] == 's' ||
+        FLAGS_output_pattern_file[p+3] == 'S'));
+    if (eps) {
+      const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
+      const Eigen::Vector2d offset(0,0);
+      calibu::TargetGridDot(grid_spacing_, grid_).
+          SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
+                  pts_per_unit);
+    } else {
+      calibu::TargetGridDot(grid_spacing_, grid_).
+          SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
+    }
     LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
   }
 }
