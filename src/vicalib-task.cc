@@ -345,13 +345,17 @@ void VicalibTask::Draw3d() {
     pangolin::glColorBin(c, 2, 0.2);
     for (size_t k = 0; k < calibrator_.NumFrames(); ++k) {
       // Draw the camera frame if we had measurements from it
-      if (calibrator_.GetFrame(k)->has_measurements_from_cam[c]) {
+      std::shared_ptr<VicalibFrame<double> > frame = calibrator_.GetFrame(k);
+      if (!frame) continue;
+
+      if (c < frame->has_measurements_from_cam.size() &&
+          frame->has_measurements_from_cam[c]) {
         pangolin::glDrawAxis(
-            (calibrator_.GetFrame(k)->t_wp_ * t_ck.inverse()).matrix(), 0.01);
+            (frame->t_wp_ * t_ck.inverse()).matrix(), 0.01);
       }
 
       // Draw the IMU frame
-      pangolin::glDrawAxis((calibrator_.GetFrame(k)->t_wp_).matrix(), 0.02);
+      pangolin::glDrawAxis((frame->t_wp_).matrix(), 0.02);
 
       glColor4f(1, 1, 1, 1);
       // also draw the imu integration for this pose

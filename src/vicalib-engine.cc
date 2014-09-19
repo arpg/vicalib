@@ -32,7 +32,7 @@ DEFINE_bool(calibrate_imu, true,
 DEFINE_bool(calibrate_intrinsics, true,
             "Calibrate the camera intrinsics as well as the extrinsics.");
 DEFINE_string(device_serial, "-1", "Serial number of device.");
-DEFINE_bool(exit_vicalib_on_finish, false,
+DEFINE_bool(exit_vicalib_on_finish, true,
             "Exit vicalib when the optimization finishes.");
 DEFINE_int32(frame_skip, 0, "Number of frames to skip between constraints.");
 DEFINE_int32(grid_height, 10, "Height of grid in circles.");
@@ -96,7 +96,7 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
     sensors_finished_(false),
     gyro_filter_(10, FLAGS_static_gyro_threshold),
     accel_filter_(10, FLAGS_static_accel_threshold) {
-  //CHECK(!FLAGS_cam.empty());
+
   if (!FLAGS_cam.empty()) {
     try {
       camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
@@ -114,7 +114,8 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
     } catch (...) {
       LOG(ERROR) << "Could not create IMU from URI: " << FLAGS_imu;
     }
-  }
+  } else
+    FLAGS_calibrate_imu = false;
 }
 
 VicalibEngine::~VicalibEngine() {
@@ -138,8 +139,9 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
   }
 
   if (model_strings.size() < camera_->NumChannels()) {
-    LOG(INFO) << "No model declared for all the camera channels, assuming FOV";
-    model_strings.resize(camera_->NumChannels(), "fov");
+    LOG(INFO) << "No model declared for all the camera channels, "
+                 "assuming poly3";
+    model_strings.resize(camera_->NumChannels(), "poly3");
   }
 
   aligned_vector<CameraAndPose> input_cameras;
@@ -202,6 +204,9 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 #ifdef BUILD_GUI
   pangolin::RegisterKeyPressCallback(' ', [&]() {
       FLAGS_paused = !FLAGS_paused;
+    });
+  pangolin::RegisterKeyPressCallback('[', [&]() {
+      FLAGS_num_vicalib_frames = 0; // this starts the calibration
     });
 #endif  // BUILD_GUI
   return task;
