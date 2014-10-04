@@ -66,7 +66,9 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
   -has_initial_guess: if a cameras.xml file already exists, whether to use the values within the file to initialize the optimization. Will speed up convergence as some initialization steps will be skipepd/.
   -num_vicalib_frames: Will begin the calibration after n frames. Useful if the dataset is too long and only a certain number of frames should be used.
   -use_only_when_static: only use frames where the IMU is not moving (thresholds set by -static_accel_threshold, -static_gyro_threshold and -static_threshold_preset).
+  
   -find_time_offset: whether to optimize the time difference between the IMU and camera
+  
   -use_system_time: whether or not to use the system_time or device_time timestamps. 
   
 
