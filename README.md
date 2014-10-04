@@ -42,8 +42,11 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
   -cam driver:[<driver_options>]//<driver_path>
   
   There are many camera drivers available in HAL (which is a dependency). The drivers are located in /Hal/Camera/Drivers. The specific usage for a library is provided in the <driver_name>Factory.cpp file. For example the FileReader driver is used to read images from disk. The FileReaderFactory.cpp file contains a list of <driver_options> available. A sample URI for the FileReader driver is as follows 
+  
   file:[loop=1,startframe=100]///usr/local/datasets/my_dataset/[left,right]*pgm
+  
   Which will attempt to read files with the [left,right]*pgm regex from the directory /usr/local/datasets/my_dataset/, skipping the first 100 frames and looping back to the first frame when reaching the end of the files.
+  
   (Note that the FileReader driver has the capability to extract timestamps from file names, in order to sychronize visual and inertial information).
   
 -imu specifies the URI for IMU information. It is formatted as follows
@@ -59,9 +62,13 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
   Note: If any of the boolean options have a default value of true, they can be turned off by prefixing them with "no" for example the -calibrate_imu flag has a default value of true. Passing -nocalibrate_imu turns this flag off.
   
   The description for a number of important options is as follows:
+  
   -calibrate_imu: whether or not to including IMU information in the calibration. Will include by default the IMU to camera extrinsics, biases and scale factors
+  
   -calibrate_intrinsics: calibrate the camera intrinsics as well as the extrinsics. (useful if calibrating a stereo rig with known intrinsics)
+  
   -frame_skip: number of frames to skip before adding a measurement frame. (useful if there are too many frames in the dataset and you wish to skip some frames).
+  
   -grid_preset: which grid preset to use. 0 indicates the small grid template, and 1 indicates the large template.
   
   -has_initial_guess: if a cameras.xml file already exists, whether to use the values within the file to initialize the optimization. Will speed up convergence as some initialization steps will be skipepd/.
