@@ -63,8 +63,11 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
   -calibrate_intrinsics: calibrate the camera intrinsics as well as the extrinsics. (useful if calibrating a stereo rig with known intrinsics)
   -frame_skip: number of frames to skip before adding a measurement frame. (useful if there are too many frames in the dataset and you wish to skip some frames).
   -grid_preset: which grid preset to use. 0 indicates the small grid template, and 1 indicates the large template.
+  
   -has_initial_guess: if a cameras.xml file already exists, whether to use the values within the file to initialize the optimization. Will speed up convergence as some initialization steps will be skipepd/.
+  
   -num_vicalib_frames: Will begin the calibration after n frames. Useful if the dataset is too long and only a certain number of frames should be used.
+  
   -use_only_when_static: only use frames where the IMU is not moving (thresholds set by -static_accel_threshold, -static_gyro_threshold and -static_threshold_preset).
   
   -find_time_offset: whether to optimize the time difference between the IMU and camera
