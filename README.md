@@ -28,7 +28,9 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
 -models defines the specific camera model to use for intrinsics calibration. These camera models are defined as follows:
 
   "fov": FOV camera model. suitable for wide angle (fish-eye) lenses [Straight lines have to be straight, F Devernay, O Faugeras, Machine Vision and Applications 13 (1), 14-24]
+  
   "poly2": Polynomial camera model with two distortion parameters.
+  
   "poly3": Polynomial camera model with three distortion parameters.
   "kb4": The Kannala Brandt camera model
   
