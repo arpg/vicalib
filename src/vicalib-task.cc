@@ -529,7 +529,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
     const double timestamp = image->Timestamp() == 0 ? images->Timestamp() :
                                                        image->Timestamp();
     LOG(INFO) << std::fixed << timestamp;
-    if (timestamp != frame_times_[ii]) {
+    if (timestamp != frame_times_[ii] || !FLAGS_calibrate_imu) {
       num_new_frames++;
       frame_times_[ii] = timestamp;
       valid_frames[ii] = true;
