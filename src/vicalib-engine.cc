@@ -170,6 +170,12 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
   }
 
+  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  camera_->Capture(*images);
+  for (size_t i = 0; i < images->Size() && i < input_cameras.size(); ++i) {
+    input_cameras[i].camera.SetSerialNumber(images->at(i)->SerialNumber());
+  }
+
   Vector6d biases(Vector6d::Zero());
   Vector6d scale_factors(Vector6d::Ones());
 
