@@ -261,7 +261,12 @@ void VicalibEngine::CalibrateAndDrawLoop() {
 
 void VicalibEngine::Run() {
   CreateGrid();
-  if(!camera_) LOG(FATAL) << "No camera URI given";
+  if (!camera_) {
+    if (!FLAGS_output_pattern_file.empty())
+      exit(1);
+    else
+      LOG(FATAL) << "No camera URI given";
+  }
   while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
   CalibrateAndDrawLoop();
