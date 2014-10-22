@@ -14,9 +14,8 @@
 #include <visual-inertial-calibration/eigen-alignment.h>
 #include <visual-inertial-calibration/boxcar-filter.h>
 
-DECLARE_int32(grid_preset);  // Defined in vicalib-engine.cc.
+DECLARE_string(grid_preset);  // Defined in vicalib-engine.cc.
 DECLARE_int32(static_threshold_preset);  // Defined in vicalib-engine.cc.
-DECLARE_bool(use_grid_preset);  // Defined in vicalib-engine.cc.
 DECLARE_bool(use_static_threshold_preset);  // Defined in vicalib-engine.cc.
 
 namespace visual_inertial_calibration {
