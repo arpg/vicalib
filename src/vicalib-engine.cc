@@ -296,6 +296,8 @@ void VicalibEngine::CreateGrid() {
         preset = GridPresetGWUSmall;
       else if (FLAGS_grid_preset == "large")
         preset = GridPresetGoogleLarge;
+      else if (FLAGS_grid_preset == "medium")
+        preset = GridPresetMedium;
     }
 
     switch (preset) {
@@ -304,6 +306,12 @@ void VicalibEngine::CreateGrid() {
         grid_spacing_ = 0.254 / 18;  // meters
         large_rad = 0.00423;
         small_rad = 0.00283;
+        break;
+      case GridPresetMedium:
+        grid_ = MediumGrid();
+        grid_spacing_ = 0.03156;  // meters
+        large_rad = 0.00889;
+        small_rad = 0.00635;
         break;
       case GridPresetGoogleLarge:
         grid_ = GoogleLargeGrid();
