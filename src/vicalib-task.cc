@@ -47,6 +47,9 @@ DEFINE_double(max_imu_gyro_diff, 0.1,
 DEFINE_double(max_imu_accel_diff, 0.1,
               "Maximum accelrometer bias difference between calibrations.");
 
+DEFINE_bool(use_system_time, true,
+              "Whether to use device or system time for sensors.");
+
 namespace visual_inertial_calibration {
 
 struct VicalibGuiOptions {
@@ -526,10 +529,13 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
     std::shared_ptr<pb::Image> image = images_->at(ii);
-    const double timestamp = image->Timestamp() == 0 ? images->Timestamp() :
-                                                       image->Timestamp();
-    LOG(INFO) << std::fixed << timestamp;
-    if (timestamp != frame_times_[ii]) {
+    const double timestamp =
+        FLAGS_use_system_time ? images->Ref().system_time() :
+        (image->Timestamp() == 0 ? images->Timestamp() : image->Timestamp());
+    LOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
+                 " images: " << images->Timestamp() << " sys: " <<
+                 images->Ref().system_time() << " final: " << timestamp;
+    if (timestamp != frame_times_[ii] || !FLAGS_calibrate_imu) {
       num_new_frames++;
       frame_times_[ii] = timestamp;
       valid_frames[ii] = true;
@@ -563,9 +569,12 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
     Eigen::VectorXd gyro, accel;
     ReadVector(imu.accel(), &accel);
     ReadVector(imu.gyro(), &gyro);
-    if (calibrator_.AddImuMeasurements(gyro, accel, imu.device_time())) {
-      LOG(INFO) << "TIMESTAMPINFO: IMU Packet "
-                << std::fixed << imu.device_time();
+    if (calibrator_.AddImuMeasurements(
+          gyro, accel, FLAGS_use_system_time ? imu.system_time() :
+                                               imu.device_time())) {
+      LOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
+               << std::fixed << imu.device_time() << " sys: " <<
+                  imu.system_time() << std::endl;
     }
   }
 }
