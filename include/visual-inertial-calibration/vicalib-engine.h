@@ -56,6 +56,7 @@ class VicalibEngine {
 
  private:
   std::shared_ptr<VicalibTask> vicalib_;
+  double first_imu_time_;
   int frames_skipped_;
   std::function<void()> stop_sensors_callback_;
   std::function<void(const std::shared_ptr<CalibrationStats>&)>
