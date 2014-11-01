@@ -27,6 +27,8 @@ static const int kNoGridPreset = -1;
 DEFINE_bool(paused, false, "Start video paused");
 #endif
 
+DECLARE_bool(use_system_time); // Defined in vicalib-task.cc
+
 DEFINE_bool(calibrate_imu, true,
             "Calibrate the IMU in addition to the camera.");
 DEFINE_bool(calibrate_intrinsics, true,
@@ -91,6 +93,7 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
                              const std::function<void(
                                  const std::shared_ptr<CalibrationStats>&)>&
                              update_stats_callback) :
+    first_imu_time_(DBL_MAX),
     frames_skipped_(0),
     stop_sensors_callback_(stop_sensors_callback),
     update_stats_callback_(update_stats_callback),
@@ -373,7 +376,9 @@ bool VicalibEngine::CameraLoop() {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
-  if (frames_skipped_ >= FLAGS_frame_skip) {
+  const double frame_timestamp = FLAGS_use_system_time ? images->Ref().system_time() :
+                           images->Timestamp();
+  if (frames_skipped_ >= FLAGS_frame_skip && frame_timestamp > first_imu_time_) {
     if (captured && should_use) {
       frames_skipped_ = 0;
       std::vector<bool> valid_frames = vicalib_->AddSuperFrame(images);
@@ -402,6 +407,11 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   ReadVector(imu.gyro(), &gyro);
   accel_filter_.Add(accel);
   gyro_filter_.Add(gyro);
+
+  if (first_imu_time_ == DBL_MAX) {
+    first_imu_time_ = FLAGS_use_system_time ? imu.system_time() :
+                                              imu.device_time();
+  }
 
   vicalib_->AddIMU(imu);
 }

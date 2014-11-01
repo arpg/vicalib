@@ -81,6 +81,7 @@ if(NOT ANDROID)
     ${OpenCV2_LIBRARIES}
     ${PbMsgs_LIBRARIES}
     ${MINIGLOG_LIBRARIES}
+    dl
     CONDITIONS ${VICALIB_CONDITIONS}
     )
 endif()

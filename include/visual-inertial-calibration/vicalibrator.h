@@ -547,6 +547,15 @@ class ViCalibrator : public ceres::IterationCallback {
         if (jj > 0) {
           ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
 
+          // check if there are IMU measurements between two frames.
+          aligned_vector<ImuMeasurementT<double> > measurements;
+          imu_buffer_.GetRange(t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+              imu_.time_offset_, &measurements);
+          if (measurements.empty()) {
+            LOG(FATAL) << "No IMU measurements found between times: " <<
+                          std::fixed << t_wk_[jj - 1]->time_ << " -- " <<
+                          std::fixed << t_wk_[jj]->time_;
+          }
           std::shared_ptr<ViFullCost> cost_functor(
               new ViFullCost(
                   &imu_buffer_,
