@@ -44,10 +44,11 @@ DEFINE_double(grid_spacing, 0.01355/*0.254 / (19 - 1) meters */,
 DEFINE_int32(grid_seed, 71, "seed used to generate the grid.");
 DEFINE_bool(has_initial_guess, false,
             "Whether or not the given calibration file has a valid guess.");
-DEFINE_int32(grid_preset, kNoGridPreset,
+DEFINE_string(grid_preset, "",
              "Which grid preset to use. "
-             "Must be a visual_inertial_calibration::GridPreset. "
-             "0 for small GWU grid, 1 for large Google grid.");
+             "Must be a visual_inertial_calibration::GridPreset or an alias. "
+             "0 or \"small\" for small GWU grid, 1 or \"large\" "
+             "for large Google grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -173,6 +174,12 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
   }
 
+  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  camera_->Capture(*images);
+  for (size_t i = 0; i < images->Size() && i < input_cameras.size(); ++i) {
+    input_cameras[i].camera.SetSerialNumber(images->at(i)->SerialNumber());
+  }
+
   Vector6d biases(Vector6d::Zero());
   Vector6d scale_factors(Vector6d::Ones());
 
@@ -264,7 +271,12 @@ void VicalibEngine::CalibrateAndDrawLoop() {
 
 void VicalibEngine::Run() {
   CreateGrid();
-  if(!camera_) LOG(FATAL) << "No camera URI given";
+  if (!camera_) {
+    if (!FLAGS_output_pattern_file.empty())
+      exit(1);
+    else
+      LOG(FATAL) << "No camera URI given";
+  }
   while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
   CalibrateAndDrawLoop();
@@ -275,27 +287,45 @@ void VicalibEngine::CreateGrid() {
   double small_rad = FLAGS_grid_small_rad;
   grid_spacing_ = FLAGS_grid_spacing;
 
-  switch (FLAGS_grid_preset) {
-    case GridPresetGWUSmall:
-      grid_ = GWUSmallGrid();
-      grid_spacing_ = 0.254 / 18;  // meters
-      large_rad = 0.00423;
-      small_rad = 0.00283;
-      break;
-    case GridPresetGoogleLarge:
-      grid_ = GoogleLargeGrid();
-      grid_spacing_ = 0.03156;  // meters
-      large_rad = 0.00889;
-      small_rad = 0.00635;
-      break;
-    default:
-      if (FLAGS_grid_preset != kNoGridPreset) {
+  if (FLAGS_grid_preset.empty()) {
+    grid_ = calibu::MakePattern(
+        FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
+  } else {
+    int preset = kNoGridPreset;
+    try {
+      preset = std::stoi(FLAGS_grid_preset);
+    } catch(...) {
+      if (FLAGS_grid_preset == "small")
+        preset = GridPresetGWUSmall;
+      else if (FLAGS_grid_preset == "large")
+        preset = GridPresetGoogleLarge;
+      else if (FLAGS_grid_preset == "medium")
+        preset = GridPresetMedium;
+    }
+
+    switch (preset) {
+      case GridPresetGWUSmall:
+        grid_ = GWUSmallGrid();
+        grid_spacing_ = 0.254 / 18;  // meters
+        large_rad = 0.00423;
+        small_rad = 0.00283;
+        break;
+      case GridPresetMedium:
+        grid_ = MediumGrid();
+        grid_spacing_ = 0.03156;  // meters
+        large_rad = 0.00889;
+        small_rad = 0.00635;
+        break;
+      case GridPresetGoogleLarge:
+        grid_ = GoogleLargeGrid();
+        grid_spacing_ = 0.03156;  // meters
+        large_rad = 0.00889;
+        small_rad = 0.00635;
+        break;
+      default:
         LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
         break;
-      } else {
-        grid_ = calibu::MakePattern(
-            FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-      }
+    }
   }
 
   if (!FLAGS_output_pattern_file.empty()) {

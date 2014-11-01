@@ -529,6 +529,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   LOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
     std::shared_ptr<pb::Image> image = images_->at(ii);
+
     const double timestamp =
         FLAGS_use_system_time ? images->Ref().system_time() :
         (image->Timestamp() == 0 ? images->Timestamp() : image->Timestamp());
