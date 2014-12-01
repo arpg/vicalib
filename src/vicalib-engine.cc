@@ -376,9 +376,10 @@ bool VicalibEngine::CameraLoop() {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
-  const double frame_timestamp = FLAGS_use_system_time ? images->Ref().system_time() :
-                           images->Timestamp();
-  if (frames_skipped_ >= FLAGS_frame_skip && frame_timestamp > first_imu_time_) {
+  const double frame_timestamp = FLAGS_use_system_time ?
+        images->Ref().system_time() : images->Timestamp();
+  if (frames_skipped_ >= FLAGS_frame_skip &&
+      (first_imu_time_ == DBL_MAX || frame_timestamp > first_imu_time_)) {
     if (captured && should_use) {
       frames_skipped_ = 0;
       std::vector<bool> valid_frames = vicalib_->AddSuperFrame(images);
