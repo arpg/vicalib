@@ -449,8 +449,8 @@ void VicalibTask::Draw2d() {
         const unsigned char* im = image_processing_[c].ImgThresh();
         unsigned char id = 0;
         bool found = true;
-        for (size_t c = 0; c < code_points.size(); c++) {
-          const Eigen::Vector3d& xwp = code_points[c];
+        for (size_t k = 0; k < code_points.size(); k++) {
+          const Eigen::Vector3d& xwp = code_points[k];
           Eigen::Vector2d pt;
           pt = cap.camera.Project(t_cw_[c] * xwp);
           if (pt[0] < kImageBoundaryRegion ||
