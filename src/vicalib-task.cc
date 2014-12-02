@@ -526,16 +526,16 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   valid_frames.resize(images_->Size());
 
 
-  LOG(INFO) << "Frame timestamps: ";
+  DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
     std::shared_ptr<pb::Image> image = images_->at(ii);
 
     const double timestamp =
         FLAGS_use_system_time ? images->Ref().system_time() :
         (image->Timestamp() == 0 ? images->Timestamp() : image->Timestamp());
-    LOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
-                 " images: " << images->Timestamp() << " sys: " <<
-                 images->Ref().system_time() << " final: " << timestamp;
+    DLOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
+                  " images: " << images->Timestamp() << " sys: " <<
+                  images->Ref().system_time() << " final: " << timestamp;
     if (timestamp != frame_times_[ii] || !FLAGS_calibrate_imu) {
       num_new_frames++;
       frame_times_[ii] = timestamp;
@@ -550,7 +550,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   if (is_new_frame) {
     current_frame_time_ = frame_times_[0];
-    LOG(INFO) << "Adding frame at time " << current_frame_time_;
+    DLOG(INFO) << "Adding frame at time " << current_frame_time_;
 
     AddImageMeasurements(valid_frames);
   } else if (!is_new_frame) {
