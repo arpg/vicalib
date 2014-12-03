@@ -220,7 +220,6 @@ struct InterpolationBufferT {
     while (GetNext(end_time, dt, &index, &meas)) {
       measurements->push_back(meas);
     }
-    measurements->push_back(meas);
   }
 };
 
