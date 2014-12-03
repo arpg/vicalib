@@ -405,6 +405,8 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 
+  if(!vicalib_) return;
+
   Eigen::VectorXd gyro, accel;
   ReadVector(imu.accel(), &accel);
   ReadVector(imu.gyro(), &gyro);
