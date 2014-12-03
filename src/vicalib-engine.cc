@@ -104,8 +104,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
   if (!FLAGS_cam.empty()) {
     try {
       camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
-    } catch (...) {
-      LOG(ERROR) << "Could not create camera from URI: " << FLAGS_cam;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create camera from URI: " << FLAGS_cam
+                 << ". Reason: " << ex.what();
     }
     stats_.reset(new CalibrationStats(camera_->NumChannels()));
   }
@@ -115,8 +116,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
       imu_.reset(new hal::IMU(FLAGS_imu));
       imu_->RegisterIMUDataCallback(
           std::bind(&VicalibEngine::ImuHandler, this, _1));
-    } catch (...) {
-      LOG(ERROR) << "Could not create IMU from URI: " << FLAGS_imu;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create IMU from URI: " << FLAGS_imu
+                 << ". Reason: " << ex.what();
     }
   } else
     FLAGS_calibrate_imu = false;
