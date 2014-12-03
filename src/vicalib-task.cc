@@ -573,9 +573,9 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
     if (calibrator_.AddImuMeasurements(
           gyro, accel, FLAGS_use_system_time ? imu.system_time() :
                                                imu.device_time())) {
-      LOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
-               << std::fixed << imu.device_time() << " sys: " <<
-                  imu.system_time() << std::endl;
+      DLOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
+                << std::fixed << imu.device_time() << " sys: " <<
+                   imu.system_time() << std::endl;
     }
   }
 }
