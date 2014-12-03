@@ -9,7 +9,6 @@
 #include <calibu/cam/CameraXml.h>
 #include <calibu/cam/CameraModelT.h>
 #include <calibu/target/RandomGrid.h>
-#include <calibu/target/TargetViconGridDot.h>
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
 #include <PbMsgs/Matrix.h>
@@ -207,7 +206,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                                  FLAGS_max_reprojection_error);
   std::shared_ptr<VicalibTask> task(
       new VicalibTask(camera_->NumChannels(), widths, heights,
-                      grid_spacing_, target_, //grid_,
+                      grid_spacing_, grid_,
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
@@ -290,10 +289,8 @@ void VicalibEngine::CreateGrid() {
   double small_rad = FLAGS_grid_small_rad;
   grid_spacing_ = FLAGS_grid_spacing;
 
-  Eigen::MatrixXi grid;
-  int vicon_layout = kNoGridPreset;
   if (FLAGS_grid_preset.empty()) {
-    grid = calibu::MakePattern(
+    grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
   } else {
     int preset = kNoGridPreset;
@@ -306,31 +303,23 @@ void VicalibEngine::CreateGrid() {
         preset = GridPresetGoogleLarge;
       else if (FLAGS_grid_preset == "medium")
         preset = GridPresetMedium;
-      else if (FLAGS_grid_preset == "medium-vicon")
-        preset = GridPresetViconMedium;
-      else if (FLAGS_grid_preset == "large-vicon")
-        preset = GridPresetViconLarge;
     }
 
     switch (preset) {
       case GridPresetGWUSmall:
-        grid = GWUSmallGrid();
+        grid_ = GWUSmallGrid();
         grid_spacing_ = 0.254 / 18;  // meters
         large_rad = 0.00423;
         small_rad = 0.00283;
         break;
-      case GridPresetViconMedium:
-        vicon_layout = calibu::TargetViconGridDot::EShapeAlignRight;
       case GridPresetMedium:
-        grid = MediumGrid();
+        grid_ = MediumGrid();
         grid_spacing_ = 0.03156;  // meters
         large_rad = 0.00889;
         small_rad = 0.00635;
         break;
-      case GridPresetViconLarge:
-        vicon_layout = calibu::TargetViconGridDot::EShapeAlignBottom;
       case GridPresetGoogleLarge:
-        grid = GoogleLargeGrid();
+        grid_ = GoogleLargeGrid();
         grid_spacing_ = 0.03156;  // meters
         large_rad = 0.00889;
         small_rad = 0.00635;
@@ -341,31 +330,25 @@ void VicalibEngine::CreateGrid() {
     }
   }
 
-  target_.reset(new calibu::TargetGridDot(grid_spacing_, grid));
-  if(vicon_layout != kNoGridPreset) {
-    target_.reset(new calibu::TargetViconGridDot(*target_,
-      static_cast<calibu::TargetViconGridDot::ViconLayout>(vicon_layout)));
-  }
-
   if (!FLAGS_output_pattern_file.empty()) {
     // eps or svg?
     std::string::size_type p = FLAGS_output_pattern_file.find_last_of('.');
     bool eps =  (p != std::string::npos &&
-            p + 3 < FLAGS_output_pattern_file.size() &&
-            (FLAGS_output_pattern_file[p+1] == 'e' ||
-            FLAGS_output_pattern_file[p+1] == 'E') &&
-            (FLAGS_output_pattern_file[p+2] == 'p' ||
-            FLAGS_output_pattern_file[p+2] == 'P') &&
-            (FLAGS_output_pattern_file[p+3] == 's' ||
-            FLAGS_output_pattern_file[p+3] == 'S'));
-
+        (FLAGS_output_pattern_file[p+1] == 'e' ||
+        FLAGS_output_pattern_file[p+1] == 'E') &&
+        (FLAGS_output_pattern_file[p+2] == 'p' ||
+        FLAGS_output_pattern_file[p+2] == 'P') &&
+        (FLAGS_output_pattern_file[p+3] == 's' ||
+        FLAGS_output_pattern_file[p+3] == 'S'));
     if (eps) {
       const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
       const Eigen::Vector2d offset(0,0);
-      target_->SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
-                      pts_per_unit);
+      calibu::TargetGridDot(grid_spacing_, grid_).
+          SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
+                  pts_per_unit);
     } else {
-      target_->SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
+      calibu::TargetGridDot(grid_spacing_, grid_).
+          SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
     }
     LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
   }
@@ -422,8 +405,6 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 
-  if(!vicalib_) return;
-
   Eigen::VectorXd gyro, accel;
   ReadVector(imu.accel(), &accel);
   ReadVector(imu.gyro(), &gyro);
@@ -434,6 +415,8 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
     first_imu_time_ = FLAGS_use_system_time ? imu.system_time() :
                                               imu.device_time();
   }
+
+  vicalib_->AddIMU(imu);
 }
 
 bool VicalibEngine::SeenEnough() const {

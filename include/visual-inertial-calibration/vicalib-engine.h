@@ -10,7 +10,6 @@
 
 #include <HAL/Camera/CameraDevice.h>
 #include <HAL/IMU/IMUDevice.h>
-#include <calibu/target/TargetGridDot.h>
 #include <visual-inertial-calibration/calibration-stats.h>
 #include <visual-inertial-calibration/eigen-alignment.h>
 #include <visual-inertial-calibration/boxcar-filter.h>
@@ -22,11 +21,9 @@ DECLARE_bool(use_static_threshold_preset);  // Defined in vicalib-engine.cc.
 namespace visual_inertial_calibration {
 
 enum GridPreset {
-  GridPresetGWUSmall  = 0,    // 19x10 grid at GWU
+  GridPresetGWUSmall  = 0,  // 19x10 grid at GWU
   GridPresetGoogleLarge = 1,  // 25x36 from Google folks
-  GridPresetMedium = 2,       // 18x25 grid at CU
-  GridPresetViconLarge = 3,   // large size with vicon markers
-  GridPresetViconMedium = 4   // medium size with vicon markers
+  GridPresetMedium = 2,     // 18x25 grid at CU
 };
 
 enum StaticThresholdPreset {
@@ -69,8 +66,7 @@ class VicalibEngine {
   std::unique_ptr<hal::Camera> camera_;
   std::unique_ptr<hal::IMU> imu_;
   BoxcarFilter<Eigen::Vector3d> gyro_filter_, accel_filter_;
-  //Eigen::MatrixXi grid_;
-  std::shared_ptr<calibu::TargetGridDot> target_;
+  Eigen::MatrixXi grid_;
   double grid_spacing_;
 };
 }  // namespace visual_inertial_calibration
