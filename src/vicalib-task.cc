@@ -58,6 +58,7 @@ struct VicalibGuiOptions {
       disp_mse("ui.MSE"),
       disp_frame("ui.frame"),
       disp_thresh("ui.Display Thresh", false),
+      disp_vicon_thresh("ui.Display Vicon Thresh", false),
       disp_lines("ui.Display Lines", true),
       disp_cross("ui.Display crosses", true),
       disp_bbox("ui.Display bbox", true),
@@ -66,6 +67,7 @@ struct VicalibGuiOptions {
   pangolin::Var<double> disp_mse;
   pangolin::Var<int> disp_frame;
   pangolin::Var<bool> disp_thresh;
+  pangolin::Var<bool> disp_vicon_thresh;
   pangolin::Var<bool> disp_lines;
   pangolin::Var<bool> disp_cross;
   pangolin::Var<bool> disp_bbox;
@@ -78,16 +80,21 @@ VicalibTask::VicalibTask(
         const std::vector<size_t>& width,
         const std::vector<size_t>& height,
         double grid_spacing,
-        const Eigen::MatrixXi& grid,
+        //const Eigen::MatrixXi& grid,
+        const std::shared_ptr<calibu::TargetGridDot>& target,
         bool fix_intrinsics,
         const std::vector<CameraAndPose,
         Eigen::aligned_allocator<CameraAndPose> >& input_cameras,
         const std::vector<double>& max_reproj_errors) :
     image_processing_(),
     conic_finder_(num_streams),
-    target_(num_streams,
-            calibu::TargetGridDot(grid_spacing, grid)),
-    grid_size_(grid.cols(), grid.rows()),
+    negative_image_processing_(),
+    negative_conic_finder_(num_streams),
+    //target_(num_streams,
+    //        calibu::TargetGridDot(grid_spacing, grid)),
+    target_(num_streams, target),
+    grid_size_(target->GetBinaryPattern().cols(),
+               target->GetBinaryPattern().rows()),
     grid_spacing_(grid_spacing),
     calib_cams_(num_streams, 0),
     frame_times_(num_streams, 0),
@@ -97,10 +104,11 @@ VicalibTask::VicalibTask(
     height_(height),
     calib_frame_(-1),
     tracking_good_(num_streams, false),
+    vicon_tracking_good_(num_streams, false),
     t_cw_(num_streams),
     num_frames_(0),
     calibrator_(),
-  input_cameras_(input_cameras),
+    input_cameras_(input_cameras),
     max_reproj_errors_(max_reproj_errors),
 
 #ifdef HAVE_PANGOLIN
@@ -119,7 +127,18 @@ VicalibTask::VicalibTask(
     conic_finder_[i].Params().conic_min_area = 4.0;
     conic_finder_[i].Params().conic_min_density = 0.6;
     conic_finder_[i].Params().conic_min_aspect = 0.2;
+
+    negative_image_processing_.emplace_back(width[i], height[i]);
+    negative_image_processing_[i].Params().adaptive_thresholding = false;
+    negative_image_processing_[i].Params().black_on_white = false;
+    negative_image_processing_[i].Params().at_threshold = 245.;
+    negative_image_processing_[i].Params().at_window_ratio = 30.0;
+
+    negative_conic_finder_[i].Params().conic_min_area = 4.0;
+    negative_conic_finder_[i].Params().conic_min_density = 0.6;
+    negative_conic_finder_[i].Params().conic_min_aspect = 0.2;
   }
+
   calibrator_.FixCameraIntrinsics(fix_intrinsics);
   input_imu_biases_ = calibrator_.GetBiases();
 
@@ -243,6 +262,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     if (!valid_frames[ii]) {
       LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
+      vicon_tracking_good_[ii] = false;
       continue;
     }
 
@@ -256,11 +276,21 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     const std::vector<calibu::Conic,
                       Eigen::aligned_allocator<calibu::Conic> >& conics =
         conic_finder_[ii].Conics();
-    std::vector<int> ellipse_target__map;
+    std::vector<int> ellipse_target__map, vicon_map;
 
-    tracking_good_[ii] = target_[ii].FindTarget(image_processing_[ii],
-                                                conics,
-                                                ellipse_target__map);
+    tracking_good_[ii] = target_[ii]->FindTarget(image_processing_[ii],
+                                                 conics,
+                                                 ellipse_target__map);
+    if (target_[ii]->HasViconMarkers()) {
+      negative_image_processing_[ii].Process(img->data(), img->Width(),
+                                             img->Height(), img->Width());
+      negative_conic_finder_[ii].Find(negative_image_processing_[ii]);
+
+      vicon_tracking_good_[ii] = target_[ii]->FindViconTarget
+          (conics, ellipse_target__map,
+           negative_conic_finder_[ii].Conics(), vicon_map);
+    }
+
     if (!tracking_good_[ii]) {
       LOG(WARNING) << "Tracking bad for " << ii;
       continue;
@@ -273,7 +303,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
 
     // find camera pose given intrinsics
     PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
-                  target_[ii].Circles3D(), ellipse_target__map, 0, 0,
+                  target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
                   &t_cw_[ii]);
   }
 
@@ -302,7 +332,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
 
         for (size_t p = 0; p < ellipses[ii].size(); ++p) {
           const Eigen::Vector2d pc = ellipses[ii][p];
-          const Eigen::Vector2i pg = target_[ii].Map()[p].pg;
+          const Eigen::Vector2i pg = target_[ii]->Map()[p].pg;
 
           if (0 <= pg(0) && pg(0) < grid_size_(0) && 0 <= pg(1)
               && pg(1) < grid_size_(1)) {
@@ -326,15 +356,15 @@ void VicalibTask::Draw3d() {
   if (!v3d.IsShown()) return;
 
   v3d.ActivateScissorAndClear(stacks_);
-  calibu::glDrawTarget(target_[0], Eigen::Vector2d(0, 0), 1.0, 0.8, 1.0);
+  calibu::glDrawTarget(*target_[0], Eigen::Vector2d(0, 0), 1.0, 0.8, 1.0);
 
   if (options_->disp_barcode) {
     const std::vector<Eigen::Vector3d,
                       Eigen::aligned_allocator<Eigen::Vector3d> >& code_points =
-        target_[0].Code3D();
+        target_[0]->Code3D();
     for (const Eigen::Vector3d& xwp : code_points) {
       glColor3f(1.0, 0.0, 1.0);
-      pangolin::glDrawCircle(xwp.head<2>(), target_[0].CircleRadius());
+      pangolin::glDrawCircle(xwp.head<2>(), target_[0]->CircleRadius());
     }
   }
 
@@ -410,9 +440,13 @@ void VicalibTask::Draw2d() {
         textures_[c].Upload(image_processing_[c].Img(),
                             GL_LUMINANCE, GL_UNSIGNED_BYTE);
         textures_[c].RenderToViewportFlipY();
-      } else {
+      } else if(options_->disp_thresh) {
         textures_[c].Upload(image_processing_[c].ImgThresh(), GL_LUMINANCE,
                             GL_UNSIGNED_BYTE);
+        textures_[c].RenderToViewportFlipY();
+      } else {
+        textures_[c].Upload(negative_image_processing_[c].ImgThresh(),
+                            GL_LUMINANCE, GL_UNSIGNED_BYTE);
         textures_[c].RenderToViewportFlipY();
       }
 
@@ -425,10 +459,13 @@ void VicalibTask::Draw2d() {
       const std::vector<calibu::Conic,
                         Eigen::aligned_allocator<calibu::Conic> >& conics =
           conic_finder_[c].Conics();
+      const std::vector<calibu::Conic,
+                        Eigen::aligned_allocator<calibu::Conic> >& neg_conics =
+          negative_conic_finder_[c].Conics();
       if (options_->disp_lines) {
         for (std::list<calibu::LineGroup>::const_iterator it =
-                 target_[c].LineGroups().begin();
-             it != target_[c].LineGroups().end(); ++it) {
+                 target_[c]->LineGroups().begin();
+             it != target_[c]->LineGroups().end(); ++it) {
           glColor3f(0.5, 0.5, 0.5);
           glBegin(GL_LINE_STRIP);
           for (std::list<size_t>::const_iterator el = it->ops.begin();
@@ -444,7 +481,7 @@ void VicalibTask::Draw2d() {
         static const int kImageBoundaryRegion = 10;
         const std::vector<Eigen::Vector3d,
             Eigen::aligned_allocator<Eigen::Vector3d> >& code_points =
-                target_[c].Code3D();
+                target_[c]->Code3D();
         const CameraAndPose cap = calibrator_.GetCamera(c);
         const unsigned char* im = image_processing_[c].ImgThresh();
         unsigned char id = 0;
@@ -476,30 +513,51 @@ void VicalibTask::Draw2d() {
       }
 
       if (options_->disp_cross) {
-        for (size_t i = 0; i < conics.size(); ++i) {
-          const Eigen::Vector2d pc = conics[i].center;
-          pangolin::glColorBin(target_[c].Map()[i].value, 2);
-          pangolin::glDrawCross(pc, conics[i].bbox.Width() * 0.75);
-        }
+        DrawCrosses(conics, target_[c], 0);
+        DrawCrosses(neg_conics, target_[c], conics.size());
       }
 
       if (options_->disp_bbox) {
-        for (size_t i = 0; i < conics.size(); ++i) {
-          const Eigen::Vector2i grid_point =
-              tracking_good_[c] ?
-              target_[c].Map()[i].pg : Eigen::Vector2i(0, 0);
-
-          if (0 <= grid_point[0] && grid_point[0] < grid_size_[0] &&
-              0 <= grid_point[1] && grid_point[1] < grid_size_[1]) {
-            pangolin::glColorBin(grid_point[1] * grid_size_[0] + grid_point[0],
-                                 grid_size_[0] * grid_size_[1]);
-            calibu::glDrawRectPerimeter(conics[i].bbox);
-          }
-        }
+        DrawBoxes(conics, target_[c], tracking_good_[c], 0);
+        DrawBoxes(neg_conics, target_[c], vicon_tracking_good_[c],
+                  conics.size());
       }
     }
   }
 }
+
+void VicalibTask::DrawCrosses(const std::vector<calibu::Conic,
+                              Eigen::aligned_allocator<calibu::Conic> >& conics,
+                              const std::shared_ptr<calibu::TargetGridDot>& target,
+                              size_t index_offset) const
+{
+  for (size_t i = 0; i < conics.size(); ++i) {
+    const Eigen::Vector2d pc = conics[i].center;
+    pangolin::glColorBin(target->Map()[index_offset + i].value, 2);
+    pangolin::glDrawCross(pc, conics[i].bbox.Width() * 0.75);
+  }
+}
+
+void VicalibTask::DrawBoxes(const std::vector<calibu::Conic,
+                            Eigen::aligned_allocator<calibu::Conic> >& conics,
+                            const std::shared_ptr<calibu::TargetGridDot>& target,
+                            bool tracking_good,
+                            size_t index_offset) const
+{
+  for (size_t i = 0; i < conics.size(); ++i) {
+    const Eigen::Vector2i grid_point =
+        tracking_good ?
+        target->Map()[index_offset + i].pg : Eigen::Vector2i(0, 0);
+
+    if (0 <= grid_point[0] && grid_point[0] < grid_size_[0] &&
+        0 <= grid_point[1] && grid_point[1] < grid_size_[1]) {
+      pangolin::glColorBin(grid_point[1] * grid_size_[0] + grid_point[0],
+                           grid_size_[0] * grid_size_[1]);
+      calibu::glDrawRectPerimeter(conics[i].bbox);
+    }
+  }
+}
+
 #endif  // HAVE_PANGOLIN
 
 void VicalibTask::Draw() {
@@ -524,7 +582,6 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   int num_new_frames = 0;
   std::vector<bool> valid_frames;
   valid_frames.resize(images_->Size());
-
 
   DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
@@ -573,9 +630,9 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
     if (calibrator_.AddImuMeasurements(
           gyro, accel, FLAGS_use_system_time ? imu.system_time() :
                                                imu.device_time())) {
-      LOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
-               << std::fixed << imu.device_time() << " sys: " <<
-                  imu.system_time() << std::endl;
+      DLOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
+                << std::fixed << imu.device_time() << " sys: " <<
+                   imu.system_time() << std::endl;
     }
   }
 }

@@ -58,7 +58,8 @@ class VicalibTask {
               const std::vector<size_t>& width,
               const std::vector<size_t>& height,
               double gspacing,
-              const Eigen::MatrixXi& grid,
+              //const Eigen::MatrixXi& grid,
+              const std::shared_ptr<calibu::TargetGridDot>& target,
               bool fix_intrinsics,
               const aligned_vector<CameraAndPose>& input_cameras,
               const std::vector<double>& max_reproj_errors);
@@ -91,13 +92,28 @@ class VicalibTask {
   int AddFrame(double frame_time);
   bool IsFrameClear();
   void LogValidationStats();
+
+#ifdef HAVE_PANGOLIN
   void Draw2d();
   void Draw3d();
+  void DrawCrosses(const std::vector<calibu::Conic,
+                   Eigen::aligned_allocator<calibu::Conic> >& conics,
+                   const std::shared_ptr<calibu::TargetGridDot>& target,
+                   size_t index_offset) const;
+
+  void DrawBoxes(const std::vector<calibu::Conic,
+                 Eigen::aligned_allocator<calibu::Conic> >& conics,
+                 const std::shared_ptr<calibu::TargetGridDot>& target,
+                 bool tracking_good,
+                 size_t index_offset) const;
+#endif
 
  private:
   std::vector<calibu::ImageProcessing> image_processing_;
   aligned_vector<calibu::ConicFinder> conic_finder_;
-  aligned_vector<calibu::TargetGridDot> target_;
+  std::vector<calibu::ImageProcessing> negative_image_processing_;
+  aligned_vector<calibu::ConicFinder> negative_conic_finder_;
+  aligned_vector<std::shared_ptr<calibu::TargetGridDot>> target_;
   Eigen::Vector2i grid_size_;
   double frame_timestamp_offset_;
   double grid_spacing_;
@@ -110,6 +126,7 @@ class VicalibTask {
   std::vector<size_t> height_;
   int calib_frame_;
   std::vector<bool> tracking_good_;
+  std::vector<bool> vicon_tracking_good_;
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
