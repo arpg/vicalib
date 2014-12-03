@@ -104,8 +104,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
   if (!FLAGS_cam.empty()) {
     try {
       camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
-    } catch (...) {
-      LOG(ERROR) << "Could not create camera from URI: " << FLAGS_cam;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create camera from URI: " << FLAGS_cam
+                 << ". Reason: " << ex.what();
     }
     stats_.reset(new CalibrationStats(camera_->NumChannels()));
   }
@@ -115,8 +116,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
       imu_.reset(new hal::IMU(FLAGS_imu));
       imu_->RegisterIMUDataCallback(
           std::bind(&VicalibEngine::ImuHandler, this, _1));
-    } catch (...) {
-      LOG(ERROR) << "Could not create IMU from URI: " << FLAGS_imu;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create IMU from URI: " << FLAGS_imu
+                 << ". Reason: " << ex.what();
     }
   } else
     FLAGS_calibrate_imu = false;
@@ -376,9 +378,10 @@ bool VicalibEngine::CameraLoop() {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
-  const double frame_timestamp = FLAGS_use_system_time ? images->Ref().system_time() :
-                           images->Timestamp();
-  if (frames_skipped_ >= FLAGS_frame_skip && frame_timestamp > first_imu_time_) {
+  const double frame_timestamp = FLAGS_use_system_time ?
+        images->Ref().system_time() : images->Timestamp();
+  if (frames_skipped_ >= FLAGS_frame_skip &&
+      (first_imu_time_ == DBL_MAX || frame_timestamp > first_imu_time_)) {
     if (captured && should_use) {
       frames_skipped_ = 0;
       std::vector<bool> valid_frames = vicalib_->AddSuperFrame(images);
@@ -401,6 +404,8 @@ bool VicalibEngine::CameraLoop() {
 void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
+
+  if(!vicalib_) return;
 
   Eigen::VectorXd gyro, accel;
   ReadVector(imu.accel(), &accel);
