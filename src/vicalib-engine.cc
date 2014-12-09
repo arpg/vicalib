@@ -334,6 +334,7 @@ void VicalibEngine::CreateGrid() {
     // eps or svg?
     std::string::size_type p = FLAGS_output_pattern_file.find_last_of('.');
     bool eps =  (p != std::string::npos &&
+        p + 3 < FLAGS_output_pattern_file.size() &&
         (FLAGS_output_pattern_file[p+1] == 'e' ||
         FLAGS_output_pattern_file[p+1] == 'E') &&
         (FLAGS_output_pattern_file[p+2] == 'p' ||
@@ -351,6 +352,12 @@ void VicalibEngine::CreateGrid() {
           SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
     }
     LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
+    if (!eps) {
+      LOG(INFO) << "You may convert the file into PDF with ImageMagick:"
+                << std::endl
+                << "convert -density 300 " << FLAGS_output_pattern_file << " "
+                << FLAGS_output_pattern_file << ".pdf";
+    }
   }
 }
 
