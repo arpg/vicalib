@@ -305,6 +305,30 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
                   target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
                   &t_cw_[ii]);
+
+    if (target_[ii]->HasViconMarkers() && vicon_tracking_good_[ii]) {
+
+      /*
+      const CameraModelInterface& cam,
+      const std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > & img_pts,
+      const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d> > & ideal_pts,
+      const std::vector<int> & candidate_map,
+      int robust_3pt_its,
+      float robust_3pt_tol,
+      Sophus::SE3d * T
+      */
+
+      std::vector<aligned_vector<Eigen::Vector2d> > img_points;
+      img_points.reserve(negative_conic_finder_[ii].Conics());
+      for (auto& conic : negative_conic_finder_[ii].Conics()) {
+        img_points.emplace_back(conic.center);
+      }
+
+      // find vicon from camera
+      PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
+                    target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
+                    &t_cw_[ii]);
+    }
   }
 
   bool any_good = false;
