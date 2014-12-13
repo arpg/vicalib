@@ -258,15 +258,21 @@ void VicalibEngine::CalibrateAndDrawLoop() {
       stats_->status = vicalib_->IsSuccessful() ?
           CalibrationStats::StatusSuccess : CalibrationStats::StatusFailure;
       vicalib_->Finish(FLAGS_output);
-      WriteCalibration();
       finished = true;
-      if (FLAGS_exit_vicalib_on_finish) {
-        exit(0);
-      }
     }
     Draw(vicalib_);
 
     nanosleep(&sleep_length, NULL);
+
+    if (finished) {
+      if (target_->HasViconMarkers()) {
+        vicalib_->CalibrateVicon();
+      }
+      WriteCalibration();
+      if (FLAGS_exit_vicalib_on_finish) {
+        exit(0);
+      }
+    }
   }
 }
 

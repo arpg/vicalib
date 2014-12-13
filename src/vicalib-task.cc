@@ -4,6 +4,8 @@
 #include <visual-inertial-calibration/vicalib-task.h>
 
 #include <time.h>
+#include <chrono>
+#include <thread>
 
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
@@ -108,6 +110,7 @@ VicalibTask::VicalibTask(
     t_cw_(num_streams),
     num_frames_(0),
     calibrator_(),
+    vicon_calibrator_(),
     input_cameras_(input_cameras),
     max_reproj_errors_(max_reproj_errors),
 
@@ -258,6 +261,9 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
+  std::vector<aligned_vector<Eigen::Vector2d> > vicon_ellipses(n);
+  std::vector<std::vector<int> > vicon_map(n);
+  std::vector<Sophus::SE3d> t_cv(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {
       LOG(WARNING) << "Frame " << ii << " is invalid.";
@@ -276,21 +282,11 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     const std::vector<calibu::Conic,
                       Eigen::aligned_allocator<calibu::Conic> >& conics =
         conic_finder_[ii].Conics();
-    std::vector<int> ellipse_target__map, vicon_map;
+    std::vector<int> ellipse_target__map;
 
     tracking_good_[ii] = target_[ii]->FindTarget(image_processing_[ii],
                                                  conics,
                                                  ellipse_target__map);
-    if (target_[ii]->HasViconMarkers()) {
-      negative_image_processing_[ii].Process(img->data(), img->Width(),
-                                             img->Height(), img->Width());
-      negative_conic_finder_[ii].Find(negative_image_processing_[ii]);
-
-      vicon_tracking_good_[ii] = target_[ii]->FindViconTarget
-          (conics, ellipse_target__map,
-           negative_conic_finder_[ii].Conics(), vicon_map);
-    }
-
     if (!tracking_good_[ii]) {
       LOG(WARNING) << "Tracking bad for " << ii;
       continue;
@@ -306,28 +302,26 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
                   target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
                   &t_cw_[ii]);
 
-    if (target_[ii]->HasViconMarkers() && vicon_tracking_good_[ii]) {
+    if (target_[ii]->HasViconMarkers()) {
+      negative_image_processing_[ii].Process(img->data(), img->Width(),
+                                             img->Height(), img->Width());
+      negative_conic_finder_[ii].Find(negative_image_processing_[ii]);
 
-      /*
-      const CameraModelInterface& cam,
-      const std::vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > & img_pts,
-      const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d> > & ideal_pts,
-      const std::vector<int> & candidate_map,
-      int robust_3pt_its,
-      float robust_3pt_tol,
-      Sophus::SE3d * T
-      */
+      vicon_tracking_good_[ii] = target_[ii]->FindViconTarget
+          (conics, ellipse_target__map,
+           negative_conic_finder_[ii].Conics(), vicon_map[ii]);
 
-      std::vector<aligned_vector<Eigen::Vector2d> > img_points;
-      img_points.reserve(negative_conic_finder_[ii].Conics());
-      for (auto& conic : negative_conic_finder_[ii].Conics()) {
-        img_points.emplace_back(conic.center);
+      if (vicon_tracking_good_[ii]) {
+        vicon_ellipses[ii].reserve(negative_conic_finder_[ii].Conics().size());
+        for (auto& conic : negative_conic_finder_[ii].Conics()) {
+          vicon_ellipses[ii].emplace_back(conic.center);
+        }
+
+        // find vicon from camera
+        PosePnPRansac(calibrator_.GetCamera(ii).camera, vicon_ellipses[ii],
+                      target_[ii]->ViconCircles3D(), vicon_map[ii], 0, 0,
+                      &t_cv[ii]);
       }
-
-      // find vicon from camera
-      PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
-                    target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
-                    &t_cw_[ii]);
     }
   }
 
@@ -366,6 +360,37 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
             // avoid hitting mutex each time.
             calibrator_.AddObservation(calib_frame_, calib_cams_[ii], pg3d, pc,
                                        current_frame_time_);
+          }
+        }
+      }
+    }
+  }
+
+  // add vicon observations
+  if (std::find(vicon_tracking_good_.begin(), vicon_tracking_good_.end(), true)
+      != vicon_tracking_good_.end()) {
+    int frame = vicon_calibrator_.AddFrame(
+          Sophus::SE3d(Sophus::SO3d(), Eigen::Vector3d(0, 0, 1000)),
+          current_frame_time_);
+
+    if (frame >= 0) {
+      vicon_frames_.push_back(ViconFrame());
+      ViconFrame& vframe = vicon_frames_.back();
+      vframe.frame_id = frame;
+      vframe.frame_time = current_frame_time_;
+
+      for (size_t ii = 0; ii < n; ++ii) {
+        if (vicon_tracking_good_[ii]) {
+          ViconObservations& obs = vframe.cam_observations.insert
+              (std::make_pair(ii, ViconObservations())).first->second;
+
+          obs.t_cv = t_cv[ii];
+          for (size_t p = 0; p < vicon_ellipses[ii].size(); ++p) {
+            if (vicon_map[ii][p] != -1) {
+              obs.p2d_cs.emplace_back(vicon_ellipses[ii][p]);
+              obs.p3d_cs.emplace_back(
+                    t_cv[ii] * target_[ii]->ViconCircles3D()[vicon_map[ii][p]]);
+            }
           }
         }
       }
@@ -658,7 +683,55 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
                << std::fixed << imu.device_time() << " sys: " <<
                   imu.system_time() << std::endl;
     }
+
+    vicon_calibrator_.AddImuMeasurements
+        (gyro, accel, FLAGS_use_system_time ? imu.system_time() :
+                                              imu.device_time());
   }
+}
+
+void VicalibTask::CalibrateVicon() {
+  LOG(INFO) << "Calibrating Vicon observations...";
+  std::vector<int> calib_vicon_cams;
+  for (size_t ii = 0; ii < calib_cams_.size(); ++ii) {
+    calib_vicon_cams.push_back(vicon_calibrator_.AddCamera(
+                                 calibrator_.GetCamera(calib_cams_[ii]).camera,
+                                 calibrator_.GetCamera(calib_cams_[ii]).T_ck));
+  }
+  vicon_calibrator_.FixCameraIntrinsics(true);
+  vicon_calibrator_.SetOptimizationFlags(calibrator_.GetBiasActive(),
+                                         calibrator_.GetInertialActive(),
+                                         calibrator_.GetRotationOnlyActive(),
+                                         calibrator_.GetTimeOffsetActive());
+  vicon_calibrator_.SetFunctionTolerance(FLAGS_function_tolerance);
+
+  for (const ViconFrame& frame : vicon_frames_) {
+    for (auto it : frame.cam_observations) {
+      const int ii = it.first;
+      const ViconObservations& obs = it.second;
+
+      vicon_calibrator_.GetFrame(frame.frame_id)->t_wp_ =
+          calibrator_.GetFrame(frame.frame_id)->t_wp_;
+
+      const Sophus::SE3d& T_wc =
+          vicon_calibrator_.GetCamera(calib_vicon_cams[ii]).T_ck;
+      for (size_t p = 0; p < obs.size(); ++p) {
+        vicon_calibrator_.AddObservation(frame.frame_id, calib_vicon_cams[ii],
+                                         T_wc * obs.p3d_cs[p], obs.p2d_cs[p],
+                                         frame.frame_time);
+      }
+    }
+  }
+
+  // #####
+  vicon_calibrator_.Start();
+  LOG(INFO) << "Waiting 15 secs...";
+  std::this_thread::sleep_for(std::chrono::milliseconds(15000));
+  vicon_calibrator_.Stop();
+
+  std::cout << vicon_calibrator_.GetCamera(0).T_ck.matrix3x4() << std::endl;
+
+  vicon_calibrator_.WriteCameraModels("test.xml");
 }
 
 /**

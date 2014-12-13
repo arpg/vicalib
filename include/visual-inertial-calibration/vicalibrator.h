@@ -209,6 +209,12 @@ class ViCalibrator : public ceres::IterationCallback {
     optimize_time_offset_ = optimize_imu_time_offset;
   }
 
+  inline bool GetScaleFactorActive() const { return is_scale_factor_active_; }
+  inline bool GetBiasActive() const { return is_bias_active_; }
+  inline bool GetInertialActive() const { return is_inertial_active_; }
+  inline bool GetRotationOnlyActive() const { return optimize_rotation_only_; }
+  inline bool GetTimeOffsetActive() const { return optimize_time_offset_; }
+
   // Start optimization thread to modify intrinsic / extrinsic parameters.
   void Start() {
     pthread_mutex_init(&update_mutex_, NULL);
@@ -537,52 +543,54 @@ class ViCalibrator : public ceres::IterationCallback {
       }
     }
 
-    for (size_t jj = 0; jj < t_wk_.size(); ++jj) {
-      problem->AddParameterBlock(t_wk_[jj]->t_wp_.data(), 7, &local_param_se3_);
+    if (FLAGS_calibrate_imu) {
+      for (size_t jj = 0; jj < t_wk_.size(); ++jj) {
+        problem->AddParameterBlock(t_wk_[jj]->t_wp_.data(), 7, &local_param_se3_);
 
-      // add an imu cost residual if we have not yet for this frame
-      if (jj >= num_imu_residuals_) {
-        // get all the imu measurements between these two poses, and add
-        // them to a vector
-        if (jj > 0) {
-          ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
+        // add an imu cost residual if we have not yet for this frame
+        if (jj >= num_imu_residuals_) {
+          // get all the imu measurements between these two poses, and add
+          // them to a vector
+          if (jj > 0) {
+            ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
 
-          // check if there are IMU measurements between two frames.
-          aligned_vector<ImuMeasurementT<double> > measurements;
-          imu_buffer_.GetRange(t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-              imu_.time_offset_, &measurements);
-          if (measurements.empty()) {
-            LOG(FATAL) << "No IMU measurements found between times: " <<
-                          std::fixed << t_wk_[jj - 1]->time_ << " -- " <<
-                          std::fixed << t_wk_[jj]->time_;
+            // check if there are IMU measurements between two frames.
+            aligned_vector<ImuMeasurementT<double> > measurements;
+            imu_buffer_.GetRange(t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+                imu_.time_offset_, &measurements);
+            if (measurements.empty()) {
+              LOG(FATAL) << "No IMU measurements found between times: " <<
+                            std::fixed << t_wk_[jj - 1]->time_ << " -- " <<
+                            std::fixed << t_wk_[jj]->time_;
+            }
+            std::shared_ptr<ViFullCost> cost_functor(
+                new ViFullCost(
+                    &imu_buffer_,
+                    t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+                    Eigen::Matrix<double, 9, 9>::Identity()* 500,
+                    &optimize_rotation_only_));
+
+            cost->Cost() =
+                new ceres::AutoDiffCostFunction<
+                  ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
+
+            cost->Loss() = &imu_loss_func_;
+
+            cost->set_index(jj-1);
+            cost->set_cost_functor(cost_functor);
+
+            cost->Params() = std::vector<double*> {
+              t_wk_[jj]->t_wp_.data(),
+              t_wk_[jj - 1]->t_wp_.data(), t_wk_[jj]->v_w_.data(),
+              t_wk_[jj - 1]->v_w_.data(), imu_.g_.data(), biases_.data(),
+              scale_factors_.data(), &imu_.time_offset_
+            };
+
+            imu_costs_.push_back(
+                std::unique_ptr<ImuCostFunctionAndParams>(cost));
           }
-          std::shared_ptr<ViFullCost> cost_functor(
-              new ViFullCost(
-                  &imu_buffer_,
-                  t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-                  Eigen::Matrix<double, 9, 9>::Identity()* 500,
-                  &optimize_rotation_only_));
-
-          cost->Cost() =
-              new ceres::AutoDiffCostFunction<
-                ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
-
-          cost->Loss() = &imu_loss_func_;
-
-          cost->set_index(jj-1);
-          cost->set_cost_functor(cost_functor);
-
-          cost->Params() = std::vector<double*> {
-            t_wk_[jj]->t_wp_.data(),
-            t_wk_[jj - 1]->t_wp_.data(), t_wk_[jj]->v_w_.data(),
-            t_wk_[jj - 1]->v_w_.data(), imu_.g_.data(), biases_.data(),
-            scale_factors_.data(), &imu_.time_offset_
-          };
-
-          imu_costs_.push_back(
-              std::unique_ptr<ImuCostFunctionAndParams>(cost));
+          ++num_imu_residuals_;
         }
-        ++num_imu_residuals_;
       }
     }
 
@@ -813,7 +821,8 @@ class ViCalibrator : public ceres::IterationCallback {
 
       // Attempt to estimate the gravity vector if inertial constraints
       // are active.
-      if (is_inertial_active_ &&
+      if (FLAGS_calibrate_imu &&
+          is_inertial_active_ &&
           !optimize_rotation_only_ &&
           !is_gravity_initialized_) {
         int idx = t_wk_.size() / 2;
@@ -902,10 +911,10 @@ class ViCalibrator : public ceres::IterationCallback {
               is_finished_ = true;
             }
 
-            LOG(INFO) << "bw_ba= " << biases_.transpose() << std::endl;
-            LOG(INFO) << "sfw_sfa= " << scale_factors_.transpose() << std::endl;
-            LOG(INFO) << "G= " << imu_.g_.transpose() << std::endl;
-            LOG(INFO) << "ts= " << imu_.time_offset_ << std::endl;
+            LOG(INFO) << "bw_ba= " << biases_.transpose();
+            LOG(INFO) << "sfw_sfa= " << scale_factors_.transpose();
+            LOG(INFO) << "G= " << imu_.g_.transpose();
+            LOG(INFO) << "ts= " << imu_.time_offset_;
             break;
           } else if (summary.termination_type != ceres::NO_CONVERGENCE) {
             is_finished_ = true;

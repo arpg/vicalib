@@ -85,6 +85,8 @@ class VicalibTask {
   size_t width(size_t i = 0) const { return width_[i]; }
   size_t height(size_t i = 0) const { return height_[i]; }
 
+  void CalibrateVicon();
+
  protected:
   static void* RunGUI(void* arg);
   void SetupGUI();
@@ -130,10 +132,27 @@ class VicalibTask {
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
+  ViCalibrator vicon_calibrator_;
   std::shared_ptr<pb::ImageArray> images_;
   aligned_vector<CameraAndPose> input_cameras_;
   Vector6d input_imu_biases_;
   std::vector<double> max_reproj_errors_;
+
+  struct ViconObservations {
+    Sophus::SE3d t_cv;
+    std::vector<Eigen::Vector3d> p3d_cs; // 3D point in camera frame
+    std::vector<Eigen::Vector2d> p2d_cs; // 2D point in camera frame
+    inline size_t size() const { return p2d_cs.size(); }
+  };
+
+  struct ViconFrame {
+    int frame_id;
+    double frame_time;
+    std::map<int, ViconObservations> cam_observations; // <cam_idx, obs>
+    // cam_idx is na index of calib_vicon_cams_
+  };
+
+  std::vector<ViconFrame> vicon_frames_;
 
 #ifdef HAVE_PANGOLIN
   std::vector<pangolin::GlTexture> textures_;
