@@ -51,7 +51,7 @@
 #include <visual-inertial-calibration/ceres-cost-functions.h>
 
 DECLARE_string(output_log_file);
-DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
+DECLARE_bool(calibrate_imu);  // Defined in vicalib-engine.cc
 
 namespace visual_inertial_calibration {
 
@@ -59,23 +59,22 @@ namespace visual_inertial_calibration {
 struct CameraAndPose {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
   CameraAndPose(const calibu::CameraModel& camera, const Sophus::SE3d& T_ck)
-      : camera(camera), T_ck(T_ck) { }
+      : camera(camera), T_ck(T_ck) {}
 
   calibu::CameraModel camera;
   Sophus::SE3d T_ck;
 };
 
 // Subclass to handle missing images from certain cameras.
-template<typename Scalar>
+template <typename Scalar>
 struct VicalibFrame : public ImuPoseT<Scalar> {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-  explicit VicalibFrame(const PoseT<Scalar>& pose)
-      : ImuPoseT<Scalar>(pose) { }
+  explicit VicalibFrame(const PoseT<Scalar>& pose) : ImuPoseT<Scalar>(pose) {}
 
   VicalibFrame(const Sophus::SE3Group<Scalar>& twp,
                const Eigen::Matrix<Scalar, 3, 1>& v,
                const Eigen::Matrix<Scalar, 3, 1>& w, const double time)
-      : ImuPoseT<Scalar>(twp, v, w, time) { }
+      : ImuPoseT<Scalar>(twp, v, w, time) {}
 
   void SetHasMeasurementsFromCam(size_t cam_id, const bool val) {
     // We have to resize the has_measurements_from_cam array if
@@ -147,7 +146,7 @@ class ViCalibrator : public ceres::IterationCallback {
     Clear();
   }
 
-  virtual ~ViCalibrator() { }
+  virtual ~ViCalibrator() {}
 
   // Return the root mean squared error of the camera reprojections.
   std::vector<double> GetCameraProjRMSE() const { return camera_proj_rmse_; }
@@ -163,14 +162,13 @@ class ViCalibrator : public ceres::IterationCallback {
         cameras_[c]->camera.SetRDF(calibu::RdfRobotics.matrix());
         rig.Add(cameras_[c]->camera,
                 cameras_[c]->T_ck.inverse() *
-                Sophus::SE3d(calibu::RdfRobotics.inverse(),
-                             Eigen::Vector3d::Zero()));
+                    Sophus::SE3d(calibu::RdfRobotics.inverse(),
+                                 Eigen::Vector3d::Zero()));
       } else {
         // The RDF must be set to identity (computer vision).
         cameras_[c]->camera.SetRDF(calibu::RdfVision.matrix());
 
-        rig.Add(cameras_[c]->camera,
-                cameras_[c]->T_ck.inverse());
+        rig.Add(cameras_[c]->camera, cameras_[c]->T_ck.inverse());
       }
     }
 
@@ -197,10 +195,8 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Externally adjust which parts of the optimization are active.
-  void SetOptimizationFlags(bool bias_active,
-                            bool inertial_active,
-                            bool rotation_only,
-                            bool optimize_imu_time_offset) {
+  void SetOptimizationFlags(bool bias_active, bool inertial_active,
+                            bool rotation_only, bool optimize_imu_time_offset) {
     CHECK(!is_running_);
     is_scale_factor_active_ = bias_active;
     is_bias_active_ = bias_active;
@@ -217,8 +213,8 @@ class ViCalibrator : public ceres::IterationCallback {
 
     if (!is_running_) {
       should_run_ = true;
-      pthread_create(&thread_, &thread_attr_,
-                     &ViCalibrator::SolveThreadStatic, this);
+      pthread_create(&thread_, &thread_attr_, &ViCalibrator::SolveThreadStatic,
+                     this);
     } else {
       LOG(WARNING) << "Already Running." << std::endl;
     }
@@ -231,17 +227,22 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Retrieve the number of already completed Ceres outer-iterations.
-  unsigned int GetNumIterations() {
-    return num_iterations_;
-  }
+  unsigned int GetNumIterations() { return num_iterations_; }
 
   // Access the current state of the IMU biases.
-  Vector6d GetBiases() {
-    return biases_;
+  Vector6d GetBiases() { return biases_; }
+
+  Vector6d GetBiases() const { return biases_; }
+
+  void SetSigmas(double gyro_sigma, double accel_sigma) {
+    CHECK(!is_running_);
+    gyro_sigma_ = gyro_sigma;
+    accel_sigma_ = accel_sigma;
   }
 
-  Vector6d GetBiases() const {
-    return biases_;
+  void SetTimeOffset(double offset)
+  {
+    imu_.time_offset_ = offset;
   }
 
   void SetBiases(const Vector6d& biases) {
@@ -249,9 +250,7 @@ class ViCalibrator : public ceres::IterationCallback {
     biases_ = biases;
   }
 
-  Vector6d GetScaleFactor() {
-    return scale_factors_;
-  }
+  Vector6d GetScaleFactor() { return scale_factors_; }
 
   void SetScaleFactor(const Vector6d& scale_factors) {
     CHECK(!is_running_);
@@ -259,9 +258,7 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Is the optimization currently active?
-  bool IsRunning() {
-    return is_running_ && !is_finished_;
-  }
+  bool IsRunning() { return is_running_ && !is_finished_; }
 
   // Stop optimization thread.
   void Stop() {
@@ -269,7 +266,8 @@ class ViCalibrator : public ceres::IterationCallback {
       should_run_ = false;
       try {
         pthread_join(thread_, NULL);
-      } catch(std::system_error) {
+      }
+      catch (std::system_error) {
         // thread already died.
         LOG(ERROR) << "Calibrator thread died prematurely.";
       }
@@ -308,8 +306,8 @@ class ViCalibrator : public ceres::IterationCallback {
     VicalibFrame<double> pose(t_wk, Eigen::Vector3d::Zero(),
                               Eigen::Vector3d::Zero(), time);
 
-    t_wk_.push_back(std::shared_ptr<VicalibFrame<double> >(
-        new VicalibFrame<double>(pose)));
+    t_wk_.push_back(
+        std::shared_ptr<VicalibFrame<double> >(new VicalibFrame<double>(pose)));
     pthread_mutex_unlock(&update_mutex_);
 
     return id;
@@ -320,9 +318,7 @@ class ViCalibrator : public ceres::IterationCallback {
                           const Eigen::Vector3d& accel, double time) {
     CHECK(!is_running_);
     if (time > imu_buffer_.end_time_) {
-      imu_buffer_.AddElement(
-          ImuMeasurementT<double>(
-              gyro, accel, time));
+      imu_buffer_.AddElement(ImuMeasurementT<double>(gyro, accel, time));
       return true;
     } else {
       return false;
@@ -347,7 +343,7 @@ class ViCalibrator : public ceres::IterationCallback {
 
     // new camera pose to bundle adjust
     CameraAndPose& cp = *cameras_[camera_id];
-    Sophus::SE3d& t_wk= t_wk_[frame]->t_wp_;
+    Sophus::SE3d& t_wk = t_wk_[frame]->t_wp_;
 
     // Indicate that we have measurements from this camera at this pose.
     t_wk_[frame]->SetHasMeasurementsFromCam(camera_id, true);
@@ -360,55 +356,56 @@ class ViCalibrator : public ceres::IterationCallback {
 
     // Allocate and assign the correct cost function. Lifetimes are
     // handled by Calibu.
-    if (dynamic_cast<calibu::CameraModelT<calibu::Fov>*>(&interface)) {  // NOLINT
+    if (dynamic_cast<calibu::CameraModelT<calibu::Fov>*>(
+            &interface)) {  // NOLINT
       cost->Cost() = new ceres::AutoDiffCostFunction<
-        ImuReprojectionCostFunctor<calibu::Fov>, 2,
-        Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-        calibu::Fov::NUM_PARAMS>(
-            new ImuReprojectionCostFunctor<calibu::Fov>(p_w, p_c));
+          ImuReprojectionCostFunctor<calibu::Fov>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Fov::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::Fov>(p_w, p_c));
 
-    } else if (dynamic_cast<calibu::CameraModelT<calibu::Poly2>*>(&interface)) {  // NOLINT
+    } else if (dynamic_cast<calibu::CameraModelT<calibu::Poly2>*>(
+                   &interface)) {  // NOLINT
       cost->Cost() = new ceres::AutoDiffCostFunction<
-        ImuReprojectionCostFunctor<calibu::Poly2>, 2,
-        Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-        calibu::Poly2::NUM_PARAMS>(
-            new ImuReprojectionCostFunctor<calibu::Poly2>(p_w, p_c));
+          ImuReprojectionCostFunctor<calibu::Poly2>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Poly2::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::Poly2>(p_w, p_c));
 
-    } else if (dynamic_cast<calibu::CameraModelT<calibu::Poly3>*>(&interface)) {  // NOLINT
+    } else if (dynamic_cast<calibu::CameraModelT<calibu::Poly3>*>(
+                   &interface)) {  // NOLINT
       cost->Cost() = new ceres::AutoDiffCostFunction<
-        ImuReprojectionCostFunctor<calibu::Poly3>, 2,
-        Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-        calibu::Poly3::NUM_PARAMS>(
-            new ImuReprojectionCostFunctor<calibu::Poly3>(p_w, p_c));
+          ImuReprojectionCostFunctor<calibu::Poly3>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Poly3::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::Poly3>(p_w, p_c));
 
     } else if (dynamic_cast<calibu::CameraModelT<  // NOLINT
-               calibu::ProjectionKannalaBrandt>*>(&interface)) {
+                   calibu::ProjectionKannalaBrandt>*>(&interface)) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
-        ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>, 2,
-        Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-        calibu::ProjectionKannalaBrandt::NUM_PARAMS>(
-            new ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>(
-                p_w, p_c));
+          ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::ProjectionKannalaBrandt::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>(p_w,
+                                                                          p_c));
 
     } else {
       LOG(FATAL) << "Don't know how to optimize CameraModel: "
-                 <<  interface.Type();
+                 << interface.Type();
     }
 
-    cost->Params() = {t_wk.data(), cp.T_ck.so3().data(),
+    cost->Params() = {t_wk.data(),                  cp.T_ck.so3().data(),
                       cp.T_ck.translation().data(), cp.camera.data()};
 
     cost->Loss() = &loss_func_;
-    proj_costs_[camera_id].push_back(
-        std::unique_ptr<calibu::CostFunctionAndParams>(cost));
+    proj_costs_[camera_id]
+        .push_back(std::unique_ptr<calibu::CostFunctionAndParams>(cost));
 
     pthread_mutex_unlock(&update_mutex_);
   }
 
   // Return number of synchronised camera rig frames.
-  size_t NumFrames() const {
-    return t_wk_.size();
-  }
+  size_t NumFrames() const { return t_wk_.size(); }
 
   // Return pose of camera rig frame i.
   std::shared_ptr<VicalibFrame<double> > GetFrame(size_t i) {
@@ -418,8 +415,11 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Return number of cameras in camera rig.
-  size_t NumCameras() const {
-    return cameras_.size();
+  size_t NumCameras() const { return cameras_.size(); }
+
+  // Return the buffer storing IMU measurements.
+  const InterpolationBufferT<ImuMeasurementT, double>& imu_buffer() {
+    return imu_buffer_;
   }
 
   // Return camera i of camera rig.
@@ -437,12 +437,9 @@ class ViCalibrator : public ceres::IterationCallback {
 
   // Return current Mean Square reprojection Error - the objective function
   // being minimised by optimization.
-  double MeanSquaredError() const {
-    return mse_;
-  }
+  double MeanSquaredError() const { return mse_; }
 
-  const aligned_vector<ImuPoseT<double> >
-  GetIntegrationPoses(unsigned int id) {
+  const aligned_vector<ImuPoseT<double> > GetIntegrationPoses(unsigned int id) {
     aligned_vector<ImuPoseT<double> > poses;
     if (is_inertial_active_ && !optimize_rotation_only_) {
       if (id <= t_wk_.size() - 1) {
@@ -531,8 +528,8 @@ class ViCalibrator : public ceres::IterationCallback {
         covariance_params_.push_back(cameras_[c]->camera.data());
 
         css.str("");
-        css << "c[" << c << "].params:(" <<
-            cameras_[c]->camera.NumParams() << ")";
+        css << "c[" << c << "].params:(" << cameras_[c]->camera.NumParams()
+            << ")";
         covariance_names_.push_back(css.str());
       }
     }
@@ -547,31 +544,26 @@ class ViCalibrator : public ceres::IterationCallback {
         if (jj > 0) {
           ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
 
-          std::shared_ptr<ViFullCost> cost_functor(
-              new ViFullCost(
-                  &imu_buffer_,
-                  t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-                  Eigen::Matrix<double, 9, 9>::Identity()* 500,
-                  &optimize_rotation_only_));
+          std::shared_ptr<ViFullCost> cost_functor(new ViFullCost(
+              &imu_buffer_, t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+              Eigen::Matrix<double, 9, 9>::Identity() * 500,
+              &optimize_rotation_only_));
 
-          cost->Cost() =
-              new ceres::AutoDiffCostFunction<
-                ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
+          cost->Cost() = new ceres::AutoDiffCostFunction<
+              ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
 
           cost->Loss() = &imu_loss_func_;
 
-          cost->set_index(jj-1);
+          cost->set_index(jj - 1);
           cost->set_cost_functor(cost_functor);
 
-          cost->Params() = std::vector<double*> {
-            t_wk_[jj]->t_wp_.data(),
-            t_wk_[jj - 1]->t_wp_.data(), t_wk_[jj]->v_w_.data(),
-            t_wk_[jj - 1]->v_w_.data(), imu_.g_.data(), biases_.data(),
-            scale_factors_.data(), &imu_.time_offset_
-          };
+          cost->Params() = std::vector<double*>{
+              t_wk_[jj]->t_wp_.data(), t_wk_[jj - 1]->t_wp_.data(),
+              t_wk_[jj]->v_w_.data(),  t_wk_[jj - 1]->v_w_.data(),
+              imu_.g_.data(),          biases_.data(),
+              scale_factors_.data(),   &imu_.time_offset_};
 
-          imu_costs_.push_back(
-              std::unique_ptr<ImuCostFunctionAndParams>(cost));
+          imu_costs_.push_back(std::unique_ptr<ImuCostFunctionAndParams>(cost));
         }
         ++num_imu_residuals_;
       }
@@ -579,12 +571,11 @@ class ViCalibrator : public ceres::IterationCallback {
 
     // Add costs
     if (is_visual_active_) {
-      for (size_t jj = 0 ; jj < cameras_.size() ; ++jj) {
+      for (size_t jj = 0; jj < cameras_.size(); ++jj) {
         for (size_t kk = 0; kk < proj_costs_[jj].size(); ++kk) {
           calibu::CostFunctionAndParams& cost = *(proj_costs_[jj][kk]);
-          projection_residuals_[jj].push_back(
-              problem->AddResidualBlock(cost.Cost(), cost.Loss(),
-                                        cost.Params()));
+          projection_residuals_[jj].push_back(problem->AddResidualBlock(
+              cost.Cost(), cost.Loss(), cost.Params()));
         }
       }
     }
@@ -615,7 +606,7 @@ class ViCalibrator : public ceres::IterationCallback {
   }
 
   // Entry point for background solver thread.
-  static void* SolveThreadStatic(void *void_vicalibrator) {
+  static void* SolveThreadStatic(void* void_vicalibrator) {
     CHECK(void_vicalibrator);
     ViCalibrator* vicalibrator = static_cast<ViCalibrator*>(void_vicalibrator);
     vicalibrator->SolveThread();
@@ -635,15 +626,10 @@ class ViCalibrator : public ceres::IterationCallback {
         "% 4d: f:% 8e d:% 3.2e g:% 3.2e h:% 3.2e "
         "rho:% 3.2e mu:% 3.2e eta:% 3.2e li:% 3d";
     char buffer[5000];
-    snprintf(buffer, sizeof(buffer), kReportRowFormat,
-             summary.iteration,
-             summary.cost,
-             summary.cost_change,
-             summary.gradient_max_norm,
-             summary.step_norm,
-             summary.relative_decrease,
-             summary.trust_region_radius,
-             summary.eta,
+    snprintf(buffer, sizeof(buffer), kReportRowFormat, summary.iteration,
+             summary.cost, summary.cost_change, summary.gradient_max_norm,
+             summary.step_norm, summary.relative_decrease,
+             summary.trust_region_radius, summary.eta,
              summary.linear_solver_iterations);
     LOG(INFO) << buffer;
 
@@ -653,10 +639,9 @@ class ViCalibrator : public ceres::IterationCallback {
     // Ceres calls this twice per iteration and gradient_norm is 0 (erroneously)
     static const double kNormThreshold = 1e-9;
     static const int kMaxSolverIterations = 200;
-    if (summary.gradient_norm > 0 &&
-        summary.gradient_norm < kNormThreshold) {
-      LOG(INFO) << "Terminating optimization as gradient norm = " <<
-          summary.gradient_norm << " < " << kNormThreshold;
+    if (summary.gradient_norm > 0 && summary.gradient_norm < kNormThreshold) {
+      LOG(INFO) << "Terminating optimization as gradient norm = "
+                << summary.gradient_norm << " < " << kNormThreshold;
       return ceres::SOLVER_TERMINATE_SUCCESSFULLY;
     } else if (summary.iteration > kMaxSolverIterations) {
       return ceres::SOLVER_ABORT;
@@ -668,32 +653,40 @@ class ViCalibrator : public ceres::IterationCallback {
   void UpdateImuWeights() {
     // Go through all the cost functions and update the weights.
     if (is_inertial_active_ && !optimize_rotation_only_) {
-      for (size_t ii = 0; ii < imu_costs_.size() ; ++ii) {
+      for (size_t ii = 0; ii < imu_costs_.size(); ++ii) {
         std::unique_ptr<ImuCostFunctionAndParams>& cost = imu_costs_[ii];
         aligned_vector<ImuMeasurementT<double> > measurements;
         cost->cost_functor()->GetMeasurements(imu_.time_offset_, &measurements);
 
+        if (measurements.size() == 0) {
+          continue;
+        }
+
         // To propagate covariances, cast to double in order to stop
         // auto-diff on the covariance matrix.
         PoseT<double> start_pose;
-        Sophus::SE3d t_2w = t_wk_[cost->index()+1]->t_wp_.inverse();
+        Sophus::SE3d t_2w = t_wk_[cost->index() + 1]->t_wp_.inverse();
         start_pose.t_wp_ = t_wk_[cost->index()]->t_wp_;
         start_pose.v_w_ = t_wk_[cost->index()]->v_w_;
-        start_pose.time_ =
-            measurements.front().time;
+        start_pose.time_ = measurements.front().time;
         aligned_vector<ImuPoseT<double> > poses_d;
         Eigen::Matrix<double, 10, 6> jb_q;
         Eigen::Matrix<double, 10, 10> c_imu_pose;
         c_imu_pose.setZero();
 
-        ImuPoseT<double> imu_pose =
-            ImuResidualT<double>::IntegrateResidual(
-                ImuPoseT<double>(start_pose),
-                measurements,
-                biases_.head<3>(), biases_.tail<3>(),
-                scale_factors_,
-                GetGravityVector(imu_.g_, gravity()), poses_d,
-                &jb_q, nullptr, &c_imu_pose);
+        const Eigen::Matrix<double, 6, 6> r(
+            (Eigen::Matrix<double, 6, 1>() << powi(gyro_sigma_, 2),
+             powi(gyro_sigma_, 2), powi(gyro_sigma_, 2),
+             powi(accel_sigma_, 2), powi(accel_sigma_, 2),
+             powi(accel_sigma_, 2))
+                .finished()
+                .asDiagonal());
+
+        ImuPoseT<double> imu_pose = ImuResidualT<double>::IntegrateResidual(
+            ImuPoseT<double>(start_pose), measurements, biases_.head<3>(),
+            biases_.tail<3>(), scale_factors_,
+            GetGravityVector(imu_.g_, gravity()), poses_d, &jb_q, nullptr,
+            &c_imu_pose, &r);
 
         // calculate the derivative of the lie log with
         // respect to the tangent plane at Twa
@@ -718,18 +711,17 @@ class ViCalibrator : public ceres::IterationCallback {
         dse3t1t2v_dt2.bottomRightCorner<3, 3>().setIdentity();
 
         const Eigen::Matrix<double, 9, 9> cov =
-            (dse3t1t2v_dt2 * c_imu_pose *
-             dse3t1t2v_dt2.transpose()).inverse();
+            (dse3t1t2v_dt2 * c_imu_pose * dse3t1t2v_dt2.transpose()).inverse();
 
         // Get the residuals so that we can get the Mahalanobis distance.
         Eigen::Matrix<double, 9, 1> residuals;
         residuals.head<6>() = Sophus::SE3d::log(imu_pose.t_wp_ * t_2w);
-        residuals.tail<3>() = imu_pose.v_w_ - t_wk_[cost->index()+1]->v_w_;
+        residuals.tail<3>() = imu_pose.v_w_ - t_wk_[cost->index() + 1]->v_w_;
 
         // Get the Mahalanobis distance given this residual.
         const double dist = residuals.transpose() * cov * residuals;
-        LOG(INFO) << "Mahalanobis distance for res: " << ii << " is " <<
-            dist << ", chi2inv(0.95, 9) = 16.9190";
+        LOG(INFO) << "Mahalanobis distance for res: " << ii << " is " << dist
+                  << ", chi2inv(0.95, 9) = 16.9190";
 
         cost->cost_functor()->weight_sqrt_ = cov.sqrt();
       }
@@ -753,8 +745,7 @@ class ViCalibrator : public ceres::IterationCallback {
       num_params += problem->ParameterBlockSize(x);
     }
 
-    Eigen::MatrixXd covariance_mat(num_params,
-                                   num_params);
+    Eigen::MatrixXd covariance_mat(num_params, num_params);
 
     // Compute the covariance.
     if (covariance.Compute(covariance_blocks, problem.get())) {
@@ -767,16 +758,16 @@ class ViCalibrator : public ceres::IterationCallback {
           int size_y = problem->ParameterBlockSize(y);
 
           // Create a row-major eigen matrix to take the result.
-          Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
-                        Eigen::RowMajor> block(size_x, size_y);
+          Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+              block(size_x, size_y);
           covariance.GetCovarianceBlock(x, y, block.data());
           covariance_mat.block(id_x, id_y, size_x, size_y) = block;
           id_y += size_y;
         }
         id_x += size_x;
       }
-      LOG(INFO) << "Covariance calculated for " << covariance_params_.size() <<
-          " blocks: " << std::endl;
+      LOG(INFO) << "Covariance calculated for " << covariance_params_.size()
+                << " blocks: " << std::endl;
 
       // Print the covariance column names.
       std::stringstream ss;
@@ -786,8 +777,8 @@ class ViCalibrator : public ceres::IterationCallback {
 
       LOG(INFO) << ss.str();
 
-      LOG(INFO) << "Solution covariance: " << std::endl <<
-          covariance_mat << std::endl;
+      LOG(INFO) << "Solution covariance: " << std::endl << covariance_mat
+                << std::endl;
     } else {
       LOG(INFO) << "Failed to compute covariance...";
     }
@@ -804,19 +795,17 @@ class ViCalibrator : public ceres::IterationCallback {
 
       // Attempt to estimate the gravity vector if inertial constraints
       // are active.
-      if (is_inertial_active_ &&
-          !optimize_rotation_only_ &&
+      if (is_inertial_active_ && !optimize_rotation_only_ &&
           !is_gravity_initialized_) {
         int idx = t_wk_.size() / 2;
         std::shared_ptr<VicalibFrame<double> > frame = t_wk_[idx];
-        ImuMeasurementT<double> meas =
-            imu_buffer_.GetElement(frame->time_);
+        ImuMeasurementT<double> meas = imu_buffer_.GetElement(frame->time_);
         const Eigen::Vector3d g_b = meas.a_.normalized();
         // Rotate gravity into the world frame.
         const Eigen::Vector3d g_w = frame->t_wp_.so3() * g_b;
         // Calculate the roll/pitch angles.
-        LOG(INFO) << "Body accel: " << g_b.transpose() << " world accel: " <<
-            g_w.transpose();
+        LOG(INFO) << "Body accel: " << g_b.transpose()
+                  << " world accel: " << g_w.transpose();
 
         double p, q;
         p = asin(g_w[1]);
@@ -825,11 +814,10 @@ class ViCalibrator : public ceres::IterationCallback {
 
         LOG(INFO) << "Estimated gravity as " << imu_.g_.transpose();
 
-        LOG(INFO) << "Gravity vector using estimated gravity is: " <<
-            GetGravityVector(imu_.g_, gravity()).transpose();
+        LOG(INFO) << "Gravity vector using estimated gravity is: "
+                  << GetGravityVector(imu_.g_, gravity()).transpose();
         is_gravity_initialized_ = true;
       }
-
 
       // Crank optimization
       while (problem_->NumResiduals() > 0 && should_run_ && !is_finished_) {
@@ -839,7 +827,7 @@ class ViCalibrator : public ceres::IterationCallback {
           ceres::Solve(solver_options_, problem_.get(), &summary);
 
           // Evaluate the reprojection error for each camera.
-          for (size_t ii = 0; ii < cameras_.size() ; ++ii) {
+          for (size_t ii = 0; ii < cameras_.size(); ++ii) {
             ceres::Problem::EvaluateOptions options;
             options.residual_blocks = projection_residuals_[ii];
             options.apply_loss_function = false;
@@ -857,14 +845,14 @@ class ViCalibrator : public ceres::IterationCallback {
 
           mse_ = summary.final_cost / summary.num_residuals;
           if (summary.termination_type != ceres::NO_CONVERGENCE &&
-               FLAGS_calibrate_imu) {
+              FLAGS_calibrate_imu) {
             if (!is_inertial_active_) {
               is_inertial_active_ = true;
               LOG(INFO) << "Activating inertial terms. Optimizing rotation "
-                  "component of T_ck..." << std::endl;
+                           "component of T_ck..." << std::endl;
             } else if (optimize_rotation_only_) {
               LOG(INFO) << "Finished optimizing rotations. Activating T_ck "
-                  "translation optimization..." << std::endl;
+                           "translation optimization..." << std::endl;
               optimize_rotation_only_ = false;
             } else if (!is_bias_active_) {
               is_bias_active_ = true;
@@ -878,8 +866,8 @@ class ViCalibrator : public ceres::IterationCallback {
               LOG(INFO) << "Optimization Finished... " << std::endl;
               PrintResults();
 
-              // Print the covariance matrix.
-#if not defined ANDROID && defined COMPUTE_VICALIB_COVARIANCE
+// Print the covariance matrix.
+#if not defined ANDROID&& defined COMPUTE_VICALIB_COVARIANCE
               {
                 std::stringstream ss;
                 for (const std::string& string : covariance_names_) {
@@ -901,7 +889,8 @@ class ViCalibrator : public ceres::IterationCallback {
           } else if (summary.termination_type != ceres::NO_CONVERGENCE) {
             is_finished_ = true;
           }
-        } catch(const std::exception& e) {
+        }
+        catch (const std::exception& e) {
           LOG(WARNING) << e.what() << std::endl;
         }
       }
@@ -919,13 +908,12 @@ class ViCalibrator : public ceres::IterationCallback {
   bool fix_intrinsics_;
 
   std::shared_ptr<ceres::Problem> problem_;
-  std::vector<std::shared_ptr<
-                VicalibFrame<double> > > t_wk_;
+  std::vector<std::shared_ptr<VicalibFrame<double> > > t_wk_;
   std::vector<std::unique_ptr<CameraAndPose> > cameras_;
   std::vector<std::vector<std::unique_ptr<calibu::CostFunctionAndParams> > >
-  proj_costs_;
+      proj_costs_;
   std::vector<std::unique_ptr<ImuCostFunctionAndParams> > imu_costs_;
-  std::vector<double *> covariance_params_;
+  std::vector<double*> covariance_params_;
   std::vector<double> camera_proj_rmse_;
   std::vector<std::string> covariance_names_;
   std::vector<std::vector<ceres::ResidualBlockId> > projection_residuals_;
@@ -939,6 +927,8 @@ class ViCalibrator : public ceres::IterationCallback {
   InterpolationBufferT<ImuMeasurementT, double> imu_buffer_;
   ImuCalibrationT<double> imu_;
   Vector6d biases_;
+  double gyro_sigma_;
+  double accel_sigma_;
   Vector6d scale_factors_;
   ceres::CauchyLoss imu_loss_func_;
   unsigned int num_imu_residuals_;

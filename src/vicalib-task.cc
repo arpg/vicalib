@@ -109,7 +109,8 @@ VicalibTask::VicalibTask(
     imu_strips_(),
     handler_(stacks_),
 #endif  // HAVE_PANGOLIN
-    options_(nullptr) {
+    options_(nullptr),
+  image_time_offset(-1) {
   for (size_t i = 0; i < nstreams_; ++i) {
     image_processing_.emplace_back(width[i], height[i]);
     image_processing_[i].Params().black_on_white = true;
@@ -535,9 +536,26 @@ std::vector<bool> VicalibTask::AddSuperFrame(
     LOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
                  " images: " << images->Timestamp() << " sys: " <<
                  images->Ref().system_time() << " final: " << timestamp;
+
+    // If we're finding the time offset, initialize it here.
+    if (FLAGS_find_time_offset && FLAGS_calibrate_imu &&
+        !FLAGS_use_system_time &&
+        image_time_offset == -1) {
+      if(calibrator_.imu_buffer().elements_.size() != 0){
+        image_time_offset =
+            (calibrator_.imu_buffer().elements_[0].time - timestamp);
+
+        LOG(WARNING) << "Setting initial time offset to " << image_time_offset;
+      } else {
+        LOG(WARNING) << "Not added due to missing IMU.";
+        valid_frames.assign(images_->Size(), false);
+        return valid_frames;
+      }
+    }
+
     if (timestamp != frame_times_[ii] || !FLAGS_calibrate_imu) {
       num_new_frames++;
-      frame_times_[ii] = timestamp;
+      frame_times_[ii] = timestamp + image_time_offset;
       valid_frames[ii] = true;
     } else {
       valid_frames[ii] = false;
@@ -574,7 +592,8 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
                                                imu.device_time())) {
       LOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
                << std::fixed << imu.device_time() << " sys: " <<
-                  imu.system_time() << std::endl;
+                  imu.system_time() << " a: " << accel.transpose() << " g: " <<
+                  gyro.transpose() << std::endl;
     }
   }
 }

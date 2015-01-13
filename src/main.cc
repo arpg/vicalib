@@ -9,6 +9,7 @@ int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
 
+  LOG(INFO) << "Starting vicalib engine.";
   visual_inertial_calibration::VicalibEngine engine(
       [](){}, [](const std::shared_ptr<
                  visual_inertial_calibration::CalibrationStats>&){});

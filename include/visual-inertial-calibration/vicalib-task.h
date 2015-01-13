@@ -117,6 +117,7 @@ class VicalibTask {
   aligned_vector<CameraAndPose> input_cameras_;
   Vector6d input_imu_biases_;
   std::vector<double> max_reproj_errors_;
+  double image_time_offset;
 
 #ifdef HAVE_PANGOLIN
   std::vector<pangolin::GlTexture> textures_;

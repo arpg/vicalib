@@ -80,6 +80,11 @@ DEFINE_double(grid_large_rad, 0.00423,
 DEFINE_double(grid_small_rad, 0.00283,
               "Radius of large dots (m) (necessary to save the pattern).");
 
+DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
+              "Sigma of gyroscope measurements.");
+DEFINE_double(accel_sigma, IMU_ACCEL_SIGMA,
+              "Sigma of accel measurements.");
+
 namespace visual_inertial_calibration {
 
 static const timespec sleep_length = {0, 30000000};  // 30 ms
@@ -198,6 +203,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
+  task->GetCalibrator().SetSigmas(FLAGS_gyro_sigma, FLAGS_accel_sigma);
   task->GetCalibrator().SetBiases(biases);
   task->GetCalibrator().SetScaleFactor(scale_factors);
 
@@ -338,6 +344,12 @@ bool VicalibEngine::CameraLoop() {
 
   std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
   bool captured = camera_->Capture(*images);
+  if (captured) {
+//    google::protobuf::RepeatedPtrField< ::pb::ImageMsg >* image_array =
+//        images->Ref().mutable_image();
+//    image_array->SwapElements(0, 1);
+  }
+
   bool should_use = true;
   if (FLAGS_use_only_when_static) {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
