@@ -31,8 +31,8 @@
 #include <visual-inertial-calibration/vicalibrator-utils.h>
 
 // TODO(renzo): the values below should come from calibration-provider
-#define IMU_GYRO_UNCERTAINTY 7.15584993e-5  // 0.00104719755 // 0.1 //
-#define IMU_ACCEL_UNCERTAINTY 0.00159855109  // 0.0392266 // 10
+#define IMU_GYRO_SIGMA 5.3088444e-5
+#define IMU_ACCEL_SIGMA 0.001883649
 
 namespace visual_inertial_calibration {
 
@@ -118,12 +118,12 @@ struct ImuCalibrationT {
         g_(g),
         g_vec_(GetGravityVector(g, gravity())),
         r_((Eigen::Matrix<Scalar, 6, 1>() <<
-            IMU_GYRO_UNCERTAINTY,
-            IMU_GYRO_UNCERTAINTY,
-            IMU_GYRO_UNCERTAINTY,
-            IMU_ACCEL_UNCERTAINTY,
-            IMU_ACCEL_UNCERTAINTY,
-            IMU_ACCEL_UNCERTAINTY).finished().asDiagonal()),
+            powi(IMU_GYRO_SIGMA, 2),
+            powi(IMU_GYRO_SIGMA, 2),
+            powi(IMU_GYRO_SIGMA, 2),
+            powi(IMU_ACCEL_SIGMA, 2),
+            powi(IMU_ACCEL_SIGMA, 2),
+            powi(IMU_ACCEL_SIGMA, 2)).finished().asDiagonal()),
         time_offset_(0) {
   }
 
