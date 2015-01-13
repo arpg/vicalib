@@ -55,6 +55,8 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
   
   Similar to camer drivers, the IMU drivers are from the HAL library and are available from /HAL/IMU/Drivers. The specific usage can be found in the <driver_name>Factory.cpp file. For example the CsvDriver accepets a directory as the <driver_path> directory and expects the accel.txt, gyro.txt, mag.txt and timestamp.txt files in the given directory. These files must be CSV files containing the relevant sensor information as per CsvDriver.cpp.
   
+  IMU data must follow the vision axis convention: X points to right, Y down, Z forward.
+  
 -options specifies a number of options to control the optimization. A description of these options can be obtained by running
 
   vicalib --help

@@ -14,9 +14,8 @@
 #include <visual-inertial-calibration/eigen-alignment.h>
 #include <visual-inertial-calibration/boxcar-filter.h>
 
-DECLARE_int32(grid_preset);  // Defined in vicalib-engine.cc.
+DECLARE_string(grid_preset);  // Defined in vicalib-engine.cc.
 DECLARE_int32(static_threshold_preset);  // Defined in vicalib-engine.cc.
-DECLARE_bool(use_grid_preset);  // Defined in vicalib-engine.cc.
 DECLARE_bool(use_static_threshold_preset);  // Defined in vicalib-engine.cc.
 
 namespace visual_inertial_calibration {
@@ -24,6 +23,7 @@ namespace visual_inertial_calibration {
 enum GridPreset {
   GridPresetGWUSmall  = 0,  // 19x10 grid at GWU
   GridPresetGoogleLarge = 1,  // 25x36 from Google folks
+  GridPresetMedium = 2,     // 18x25 grid at CU
 };
 
 enum StaticThresholdPreset {
@@ -56,6 +56,7 @@ class VicalibEngine {
 
  private:
   std::shared_ptr<VicalibTask> vicalib_;
+  double first_imu_time_;
   int frames_skipped_;
   std::function<void()> stop_sensors_callback_;
   std::function<void(const std::shared_ptr<CalibrationStats>&)>

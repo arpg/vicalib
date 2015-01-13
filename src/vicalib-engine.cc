@@ -27,6 +27,8 @@ static const int kNoGridPreset = -1;
 DEFINE_bool(paused, false, "Start video paused");
 #endif
 
+DECLARE_bool(use_system_time); // Defined in vicalib-task.cc
+
 DEFINE_bool(calibrate_imu, true,
             "Calibrate the IMU in addition to the camera.");
 DEFINE_bool(calibrate_intrinsics, true,
@@ -42,10 +44,11 @@ DEFINE_double(grid_spacing, 0.01355/*0.254 / (19 - 1) meters */,
 DEFINE_int32(grid_seed, 71, "seed used to generate the grid.");
 DEFINE_bool(has_initial_guess, false,
             "Whether or not the given calibration file has a valid guess.");
-DEFINE_int32(grid_preset, kNoGridPreset,
+DEFINE_string(grid_preset, "",
              "Which grid preset to use. "
-             "Must be a visual_inertial_calibration::GridPreset. "
-             "0 for small GWU grid, 1 for large Google grid.");
+             "Must be a visual_inertial_calibration::GridPreset or an alias. "
+             "0 or \"small\" for small GWU grid, 1 or \"large\" "
+             "for large Google grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -95,6 +98,7 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
                              const std::function<void(
                                  const std::shared_ptr<CalibrationStats>&)>&
                              update_stats_callback) :
+    first_imu_time_(DBL_MAX),
     frames_skipped_(0),
     stop_sensors_callback_(stop_sensors_callback),
     update_stats_callback_(update_stats_callback),
@@ -105,8 +109,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
   if (!FLAGS_cam.empty()) {
     try {
       camera_.reset(new hal::Camera(hal::Uri(FLAGS_cam)));
-    } catch (...) {
-      LOG(ERROR) << "Could not create camera from URI: " << FLAGS_cam;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create camera from URI: " << FLAGS_cam
+                 << ". Reason: " << ex.what();
     }
     stats_.reset(new CalibrationStats(camera_->NumChannels()));
   }
@@ -116,8 +121,9 @@ VicalibEngine::VicalibEngine(const std::function<void()>& stop_sensors_callback,
       imu_.reset(new hal::IMU(FLAGS_imu));
       imu_->RegisterIMUDataCallback(
           std::bind(&VicalibEngine::ImuHandler, this, _1));
-    } catch (...) {
-      LOG(ERROR) << "Could not create IMU from URI: " << FLAGS_imu;
+    } catch (std::exception& ex) {
+      LOG(FATAL) << "Could not create IMU from URI: " << FLAGS_imu
+                 << ". Reason: " << ex.what();
     }
   } else
     FLAGS_calibrate_imu = false;
@@ -173,6 +179,12 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     }
     input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
+  }
+
+  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  camera_->Capture(*images);
+  for (size_t i = 0; i < images->Size() && i < input_cameras.size(); ++i) {
+    input_cameras[i].camera.SetSerialNumber(images->at(i)->SerialNumber());
   }
 
   Vector6d biases(Vector6d::Zero());
@@ -267,7 +279,12 @@ void VicalibEngine::CalibrateAndDrawLoop() {
 
 void VicalibEngine::Run() {
   CreateGrid();
-  if(!camera_) LOG(FATAL) << "No camera URI given";
+  if (!camera_) {
+    if (!FLAGS_output_pattern_file.empty())
+      exit(1);
+    else
+      LOG(FATAL) << "No camera URI given";
+  }
   while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
   CalibrateAndDrawLoop();
@@ -278,27 +295,45 @@ void VicalibEngine::CreateGrid() {
   double small_rad = FLAGS_grid_small_rad;
   grid_spacing_ = FLAGS_grid_spacing;
 
-  switch (FLAGS_grid_preset) {
-    case GridPresetGWUSmall:
-      grid_ = GWUSmallGrid();
-      grid_spacing_ = 0.254 / 18;  // meters
-      large_rad = 0.00423;
-      small_rad = 0.00283;
-      break;
-    case GridPresetGoogleLarge:
-      grid_ = GoogleLargeGrid();
-      grid_spacing_ = 0.03156;  // meters
-      large_rad = 0.00889;
-      small_rad = 0.00635;
-      break;
-    default:
-      if (FLAGS_grid_preset != kNoGridPreset) {
+  if (FLAGS_grid_preset.empty()) {
+    grid_ = calibu::MakePattern(
+        FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
+  } else {
+    int preset = kNoGridPreset;
+    try {
+      preset = std::stoi(FLAGS_grid_preset);
+    } catch(...) {
+      if (FLAGS_grid_preset == "small")
+        preset = GridPresetGWUSmall;
+      else if (FLAGS_grid_preset == "large")
+        preset = GridPresetGoogleLarge;
+      else if (FLAGS_grid_preset == "medium")
+        preset = GridPresetMedium;
+    }
+
+    switch (preset) {
+      case GridPresetGWUSmall:
+        grid_ = GWUSmallGrid();
+        grid_spacing_ = 0.254 / 18;  // meters
+        large_rad = 0.00423;
+        small_rad = 0.00283;
+        break;
+      case GridPresetMedium:
+        grid_ = MediumGrid();
+        grid_spacing_ = 0.03156;  // meters
+        large_rad = 0.00889;
+        small_rad = 0.00635;
+        break;
+      case GridPresetGoogleLarge:
+        grid_ = GoogleLargeGrid();
+        grid_spacing_ = 0.03156;  // meters
+        large_rad = 0.00889;
+        small_rad = 0.00635;
+        break;
+      default:
         LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
         break;
-      } else {
-        grid_ = calibu::MakePattern(
-            FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-      }
+    }
   }
 
   if (!FLAGS_output_pattern_file.empty()) {
@@ -355,7 +390,10 @@ bool VicalibEngine::CameraLoop() {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();
   }
 
-  if (frames_skipped_ >= FLAGS_frame_skip) {
+  const double frame_timestamp = FLAGS_use_system_time ?
+        images->Ref().system_time() : images->Timestamp();
+  if (frames_skipped_ >= FLAGS_frame_skip &&
+      (first_imu_time_ == DBL_MAX || frame_timestamp > first_imu_time_)) {
     if (captured && should_use) {
       frames_skipped_ = 0;
       std::vector<bool> valid_frames = vicalib_->AddSuperFrame(images);
@@ -379,11 +417,18 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 
+  if(!vicalib_) return;
+
   Eigen::VectorXd gyro, accel;
   ReadVector(imu.accel(), &accel);
   ReadVector(imu.gyro(), &gyro);
   accel_filter_.Add(accel);
   gyro_filter_.Add(gyro);
+
+  if (first_imu_time_ == DBL_MAX) {
+    first_imu_time_ = FLAGS_use_system_time ? imu.system_time() :
+                                              imu.device_time();
+  }
 
   vicalib_->AddIMU(imu);
 }
