@@ -545,20 +545,11 @@ class ViCalibrator : public ceres::IterationCallback {
           ImuCostFunctionAndParams* cost = new ImuCostFunctionAndParams();
 
           // check if there are IMU measurements between two frames.
-          aligned_vector<ImuMeasurementT<double> > measurements;
-          imu_buffer_.GetRange(t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-              imu_.time_offset_, &measurements);
-          if (measurements.empty()) {
-            LOG(FATAL) << "No IMU measurements found between times: " <<
-                          std::fixed << t_wk_[jj - 1]->time_ << " -- " <<
-                          std::fixed << t_wk_[jj]->time_;
-          }
-          std::shared_ptr<ViFullCost> cost_functor(
-              new ViFullCost(
-                  &imu_buffer_,
-                  t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
-                  Eigen::Matrix<double, 9, 9>::Identity()* 500,
-                  &optimize_rotation_only_));
+          std::shared_ptr<ViFullCost> cost_functor(new ViFullCost(
+              &imu_buffer_, t_wk_[jj - 1]->time_, t_wk_[jj]->time_,
+              Eigen::Matrix<double, 9, 9>::Identity() * 500,
+              &optimize_rotation_only_));
+
 
           cost->Cost() = new ceres::AutoDiffCostFunction<
               ViFullCost, 9, 7, 7, 3, 3, 2, 6, 6, 1>(cost_functor.get());
@@ -865,7 +856,7 @@ class ViCalibrator : public ceres::IterationCallback {
               LOG(INFO) << "Finished optimizing rotations. Activating T_ck "
                            "translation optimization..." << std::endl;
               optimize_rotation_only_ = false;
-            } else if (!is_bias_active_) {
+            // } else if (!is_bias_active_) {
               is_bias_active_ = true;
               LOG(INFO) << "Activating bias terms... " << std::endl;
               problem_->SetParameterBlockVariable(biases_.data());
