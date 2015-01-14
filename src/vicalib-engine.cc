@@ -380,9 +380,20 @@ bool VicalibEngine::CameraLoop() {
   std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
   bool captured = camera_->Capture(*images);
   if (captured) {
-//    google::protobuf::RepeatedPtrField< ::pb::ImageMsg >* image_array =
-//        images->Ref().mutable_image();
-//    image_array->SwapElements(0, 1);
+    cv::Mat temp_mat;
+    for (int ii = 0; ii < images->Size(); ++ii) {
+      std::shared_ptr<pb::Image> img = images->at(ii);
+      std::cerr << "pre rows: " << img->Mat().rows << " cols: " <<
+                   img->Mat().cols << std::endl;
+      if (img->Mat().channels() == 3) {
+        cv::cvtColor(img->Mat(), temp_mat, CV_BGR2GRAY);
+      }
+      memcpy((void*)img->data(), temp_mat.data,
+             temp_mat.elemSize() * temp_mat.rows * temp_mat.cols);
+      temp_mat.copyTo(img->Mat());
+      std::cerr << "post rows: " << img->Mat().rows << " cols: " <<
+                   img->Mat().cols << std::endl;
+    }
   }
 
   bool should_use = true;
