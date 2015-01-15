@@ -85,3 +85,12 @@ if(NOT ANDROID)
     CONDITIONS ${VICALIB_CONDITIONS}
     )
 endif()
+
+# this is set so that the tests can link against the executable.
+SET_TARGET_PROPERTIES(vicalib PROPERTIES ENABLE_EXPORTS ON)
+
+option(BUILD_TESTS "Build tests." ON)
+if( BUILD_TESTS )
+  enable_testing()
+  add_subdirectory( testing )
+endif()
