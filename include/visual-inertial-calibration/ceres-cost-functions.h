@@ -449,6 +449,11 @@ struct SwitchedFullImuCostFunction {
     aligned_vector<ImuMeasurementT<T> > measurements;
     GetMeasurements(*_ttime_offset, &measurements);
 
+    if (measurements.size() == 0) {
+      residuals_vec.setZero();
+      return true;
+    }
+
     CHECK_GT(measurements.size(), 0)
         << "IMU measurements required for cost function calculation.";
 

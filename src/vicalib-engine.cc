@@ -83,6 +83,11 @@ DEFINE_double(grid_large_rad, 0.00423,
 DEFINE_double(grid_small_rad, 0.00283,
               "Radius of large dots (m) (necessary to save the pattern).");
 
+DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
+              "Sigma of gyroscope measurements.");
+DEFINE_double(accel_sigma, IMU_ACCEL_SIGMA,
+              "Sigma of accel measurements.");
+
 namespace visual_inertial_calibration {
 
 static const timespec sleep_length = {0, 30000000};  // 30 ms
@@ -135,6 +140,8 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
   for (size_t i = 0; i < camera_->NumChannels(); ++i) {
     widths.push_back(camera_->Width(i));
     heights.push_back(camera_->Height(i));
+    LOG(INFO) << "Camera " << i << " with width: " << camera_->Width(i) <<
+                 " height: " << camera_->Height(i) << std::endl;
   }
 
   std::vector<std::string> model_strings;
@@ -210,6 +217,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
+  task->GetCalibrator().SetSigmas(FLAGS_gyro_sigma, FLAGS_accel_sigma);
   task->GetCalibrator().SetBiases(biases);
   task->GetCalibrator().SetScaleFactor(scale_factors);
 
@@ -373,6 +381,19 @@ bool VicalibEngine::CameraLoop() {
 
   std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
   bool captured = camera_->Capture(*images);
+  if (captured) {
+    cv::Mat temp_mat;
+    for (int ii = 0; ii < images->Size(); ++ii) {
+      std::shared_ptr<pb::Image> img = images->at(ii);
+      if (img->Mat().channels() == 3) {
+        cv::cvtColor(img->Mat(), temp_mat, CV_BGR2GRAY);
+      }
+      memcpy((void*)img->data(), temp_mat.data,
+             temp_mat.elemSize() * temp_mat.rows * temp_mat.cols);
+      temp_mat.copyTo(img->Mat());
+    }
+  }
+
   bool should_use = true;
   if (FLAGS_use_only_when_static) {
     should_use = accel_filter_.IsStable() && gyro_filter_.IsStable();

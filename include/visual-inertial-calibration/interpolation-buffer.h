@@ -214,10 +214,13 @@ struct InterpolationBufferT {
 
     // get all the imu measurements between these two poses, and add
     // them to a vector
-    Scalar start = HasElement(start_time, dt) ? start_time : start_time_;
-    measurements->push_back(GetElement(start, dt, &index));
-    ElementT<T> meas;
-    while (GetNext(end_time, dt, &index, &meas)) {
+    if (HasElement(start_time, dt)) {
+      measurements->push_back(GetElement(start_time, dt, &index));
+      ElementT<T> meas;
+      while (GetNext(end_time, dt, &index, &meas)) {
+        measurements->push_back(meas);
+      }
+
       measurements->push_back(meas);
     }
   }
