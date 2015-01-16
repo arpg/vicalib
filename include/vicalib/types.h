@@ -25,10 +25,10 @@
 
 #include <calibu/Calibu.h>
 #include <Eigen/Eigen>
-#include <visual-inertial-calibration/eigen-alignment.h>
+#include <vicalib/eigen-alignment.h>
 #include <sophus/se3.hpp>
 
-#include <visual-inertial-calibration/vicalibrator-utils.h>
+#include <vicalib/vicalibrator-utils.h>
 
 // TODO(renzo): the values below should come from calibration-provider
 #define IMU_GYRO_SIGMA 5.3088444e-5

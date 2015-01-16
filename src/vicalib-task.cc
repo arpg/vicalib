@@ -1,7 +1,7 @@
 // Copyright (c) George Washington University, all rights reserved.  See the
 // accompanying LICENSE file for more information.
 
-#include <visual-inertial-calibration/vicalib-task.h>
+#include <vicalib/vicalib-task.h>
 
 #include <time.h>
 

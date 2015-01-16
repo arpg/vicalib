@@ -4,7 +4,7 @@
 #pragma once
 
 #include <queue>
-#include <visual-inertial-calibration/eigen-alignment.h>
+#include <vicalib/eigen-alignment.h>
 
 /** A moving average (boxcar) filter for smoothing sampled data and
  * detecting if it is at a stable value. */

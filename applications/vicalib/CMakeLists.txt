@@ -1,4 +1,4 @@
-include(FindGTest)
+cmake_minimum_required(VERSION 2.8)
 find_package(VICALIB REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(SceneGraph REQUIRED)
@@ -9,24 +9,11 @@ include_directories(${VICALIB_INCLUDE_DIRS}
                     ${Pangolin_INCLUDE_DIRS}
                     ${SceneGraph_INCLUDE_DIRS} )
 
-if(NOT TARGET gtest)
-  add_subdirectory(gtest)
-endif()
-
-include_directories(gtest/include)
-
-set(TEST_SOURCES
-    vi_sim_test.cpp
-    )
-
-include(def_test)
-
-def_executable(test_main
-  SOURCES test_main.cpp ${TEST_SOURCES}
+def_executable(vicalib_exec
+  SOURCES main.cc
   DEPENDS
-  vicalib gtest
+  vicalib
   LINK_LIBS
   ${SceneGraph_LIBRARIES}
   ${Pangolin_LIBRARIES}
   )
-

@@ -19,7 +19,7 @@
 
 #include <algorithm>
 #include <vector>
-#include <visual-inertial-calibration/eigen-alignment.h>
+#include <vicalib/eigen-alignment.h>
 
 namespace visual_inertial_calibration {
 

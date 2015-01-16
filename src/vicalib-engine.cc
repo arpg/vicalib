@@ -13,12 +13,12 @@
 #include <glog/logging.h>
 #include <PbMsgs/Matrix.h>
 
-#include <visual-inertial-calibration/eigen-alignment.h>
-#include <visual-inertial-calibration/grid-definitions.h>
-#include <visual-inertial-calibration/vicalib-task.h>
-#include <visual-inertial-calibration/vicalib-engine.h>
-#include <visual-inertial-calibration/vicalibrator.h>
-#include <visual-inertial-calibration/calibration-stats.h>
+#include <vicalib/eigen-alignment.h>
+#include <vicalib/grid-definitions.h>
+#include <vicalib/vicalib-task.h>
+#include <vicalib/vicalib-engine.h>
+#include <vicalib/vicalibrator.h>
+#include <vicalib/calibration-stats.h>
 
 static const int64_t kCalibrateAllPossibleFrames = -1;
 static const int kNoGridPreset = -1;
@@ -271,6 +271,8 @@ void VicalibEngine::CalibrateAndDrawLoop() {
       finished = true;
       if (FLAGS_exit_vicalib_on_finish) {
         exit(0);
+      } else {
+        break;
       }
     }
     Draw(vicalib_);
@@ -283,12 +285,17 @@ void VicalibEngine::Run() {
   CreateGrid();
   if (!camera_) {
     if (!FLAGS_output_pattern_file.empty())
-      exit(1);
+      if (FLAGS_exit_vicalib_on_finish) {
+        exit(1);
+      } else {
+        return;
+      }
     else
       LOG(FATAL) << "No camera URI given";
   }
   while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
+  sensors_finished_ = true;
   CalibrateAndDrawLoop();
 }
 
@@ -426,7 +433,9 @@ void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 
-  if(!vicalib_) return;
+  if(!vicalib_ || sensors_finished_) {
+    return;
+  }
 
   Eigen::VectorXd gyro, accel;
   ReadVector(imu.accel(), &accel);

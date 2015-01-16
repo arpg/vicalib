@@ -32,11 +32,11 @@
 #include <gflags/gflags.h>
 #include <sophus/se3.hpp>
 
-#include <visual-inertial-calibration/vicalibrator.h>
+#include <vicalib/vicalibrator.h>
 
 #ifdef BUILD_GUI
 #include <pangolin/pangolin.h>
-#include <visual-inertial-calibration/gl-line-strip.h>
+#include <vicalib/gl-line-strip.h>
 #endif  // BUILD_GUI
 
 namespace visual_inertial_calibration {

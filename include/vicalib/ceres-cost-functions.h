@@ -20,7 +20,7 @@
 
 #include <vector>
 #include <Eigen/StdVector>
-#include <visual-inertial-calibration/types.h>
+#include <vicalib/types.h>
 
 namespace visual_inertial_calibration {
 

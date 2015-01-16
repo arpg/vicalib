@@ -45,10 +45,10 @@
 #include <sophus/se3.hpp>
 #include <unsupported/Eigen/MatrixFunctions>
 
-#include <visual-inertial-calibration/local-param-se3.h>
-#include <visual-inertial-calibration/types.h>
-#include <visual-inertial-calibration/interpolation-buffer.h>
-#include <visual-inertial-calibration/ceres-cost-functions.h>
+#include <vicalib/local-param-se3.h>
+#include <vicalib/types.h>
+#include <vicalib/interpolation-buffer.h>
+#include <vicalib/ceres-cost-functions.h>
 
 DECLARE_string(output_log_file);
 DECLARE_bool(calibrate_imu);  // Defined in vicalib-engine.cc

@@ -10,9 +10,9 @@
 
 #include <HAL/Camera/CameraDevice.h>
 #include <HAL/IMU/IMUDevice.h>
-#include <visual-inertial-calibration/calibration-stats.h>
-#include <visual-inertial-calibration/eigen-alignment.h>
-#include <visual-inertial-calibration/boxcar-filter.h>
+#include <vicalib/calibration-stats.h>
+#include <vicalib/eigen-alignment.h>
+#include <vicalib/boxcar-filter.h>
 
 DECLARE_string(grid_preset);  // Defined in vicalib-engine.cc.
 DECLARE_int32(static_threshold_preset);  // Defined in vicalib-engine.cc.

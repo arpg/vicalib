@@ -3,7 +3,7 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <visual-inertial-calibration/vicalib-engine.h>
+#include <vicalib/vicalib-engine.h>
 
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
