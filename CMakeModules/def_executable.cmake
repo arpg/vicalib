@@ -6,7 +6,7 @@ function(def_executable exec)
   string(TOUPPER ${exec} EXEC)
 
   set(EXEC_OPTIONS)
-  set(EXEC_SINGLE_ARGS)
+  set(EXEC_SINGLE_ARGS PACKAGE)
   set(EXEC_MULTI_ARGS SOURCES DEPENDS CONDITIONS LINK_LIBS)
   cmake_parse_arguments(exec
     "${EXEC_OPTIONS}"
@@ -64,6 +64,15 @@ function(def_executable exec)
 
     if(exec_LINK_LIBS)
       target_link_libraries(${exec} ${exec_LINK_LIBS})
+    endif()
+
+    if(exec_PACKAGE)
+      install(TARGETS ${exec}
+	EXPORT ${exec_PACKAGE}
+	RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+	LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+	)
     endif()
   endif()
 endfunction()
