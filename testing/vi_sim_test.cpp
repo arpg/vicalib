@@ -43,7 +43,6 @@ TEST(ViTests, ViSimTest) {
   for (int ii = 0; ii < argc; ++ii) {
     argv[ii] = new char[strings[ii].length()];
     strcpy(argv[ii], strings[ii].c_str());
-    std::cerr << "string " << ii << " is " << argv[ii] << std::endl;
   }
 
   google::ParseCommandLineFlags(&argc, &argv, true);
