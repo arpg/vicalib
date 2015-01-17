@@ -667,7 +667,7 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
     }
   }
 
-  // Now, coparison for extrinsics will start.
+  // Now, comparison for extrinsics will start.
   // First, comparison of psoition of camera. Comparison here is done by
   // calculating distance as that requires user to specify only one threshold.
   Eigen::Vector3d lastTrans = last.T_ck.translation();
@@ -733,12 +733,12 @@ bool IMUCalibrationDiffer(const Vector6d &last,
 
 bool VicalibTask::IsSuccessful() const {
   std::vector<double> errors = calibrator_.GetCameraProjRMSE();
-  for (size_t i = 0; i < nstreams_; ++i) {
-    if (errors[i] > max_reproj_errors_[i]) {
-      LOG(WARNING) << "Reprojection error of " << errors[i]
+  for (size_t ii = 0; ii < nstreams_; ++ii) {
+    if (errors[ii] > max_reproj_errors_[ii]) {
+      LOG(WARNING) << "Reprojection error of " << errors[ii]
                    << " was greater than maximum of "
-                   << max_reproj_errors_[i]
-                   << " for camera " << i;
+                   << max_reproj_errors_[ii]
+                   << " for camera " << ii;
       return false;
     }
   }

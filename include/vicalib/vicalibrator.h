@@ -388,6 +388,13 @@ class ViCalibrator : public ceres::IterationCallback {
           calibu::ProjectionKannalaBrandt::NUM_PARAMS>(
           new ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>(p_w,
                                                                           p_c));
+    } else if (dynamic_cast<calibu::CameraModelT<  // NOLINT
+                   calibu::Pinhole>*>(&interface)) {
+      cost->Cost() = new ceres::AutoDiffCostFunction<
+          ImuReprojectionCostFunctor<calibu::Pinhole>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Pinhole::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::Pinhole>(p_w, p_c));
 
     } else {
       LOG(FATAL) << "Don't know how to optimize CameraModel: "

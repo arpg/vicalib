@@ -179,6 +179,10 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
       calibu::CameraModelT<calibu::ProjectionKannalaBrandt> starting_cam(w, h);
       starting_cam.Params() << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+    } else if (type == "linear") {
+      calibu::CameraModelT<calibu::Pinhole> starting_cam(w, h);
+      starting_cam.Params() << 300, 300, w/2.0, h/2.0;
+      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     }
     input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
   }
@@ -260,6 +264,13 @@ void VicalibEngine::CalibrateAndDrawLoop() {
     stats_->total_mse = vicalib_->GetMeanSquaredError();
     stats_->reprojection_error = vicalib_->GetCalibrator().GetCameraProjRMSE();
     stats_->num_iterations = vicalib_->GetCalibrator().GetNumIterations();
+    stats_->t_ck_vec.resize(vicalib_->GetCalibrator().NumCameras());
+    stats_->cam_intrinsics.resize(vicalib_->GetCalibrator().NumCameras());
+    for (size_t ii = 0; ii < vicalib_->GetCalibrator().NumCameras(); ++ii) {
+       stats_->t_ck_vec[ii] = vicalib_->GetCalibrator().GetCamera(ii).T_ck;
+       stats_->cam_intrinsics[ii] =
+               vicalib_->GetCalibrator().GetCamera(ii).camera.GenericParams();
+    }
     update_stats_callback_(std::make_shared<CalibrationStats>(*stats_));
 
     if (!finished && !vicalib_->IsRunning()) {
