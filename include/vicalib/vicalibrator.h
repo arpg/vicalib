@@ -588,6 +588,11 @@ class ViCalibrator : public ceres::IterationCallback {
         problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params());
       }
 
+      if (optimize_rotation_only_) {
+        LOG(INFO) << "Optimizing rotation only...";
+        problem->SetParameterBlockConstant(imu_.g_.data());
+      }
+
       // only do this once
       if (!is_bias_active_) {
         LOG(INFO) << "Setting bias terms to constant... ";
@@ -856,6 +861,7 @@ class ViCalibrator : public ceres::IterationCallback {
               LOG(INFO) << "Finished optimizing rotations. Activating T_ck "
                            "translation optimization..." << std::endl;
               optimize_rotation_only_ = false;
+              problem_->SetParameterBlockVariable(imu_.g_.data());
             // } else if (!is_bias_active_) {
               is_bias_active_ = true;
               LOG(INFO) << "Activating bias terms... " << std::endl;
