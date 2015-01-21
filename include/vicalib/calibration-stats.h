@@ -6,7 +6,7 @@
 
 #include <string>
 #include <vector>
-#include <Sophus/se3.hpp>
+#include <sophus/se3.hpp>
 #include <Eigen/Eigen>
 
 namespace visual_inertial_calibration {
