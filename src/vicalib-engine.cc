@@ -264,6 +264,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
     stats_->total_mse = vicalib_->GetMeanSquaredError();
     stats_->reprojection_error = vicalib_->GetCalibrator().GetCameraProjRMSE();
     stats_->num_iterations = vicalib_->GetCalibrator().GetNumIterations();
+    stats_->ts = vicalib_->GetCalibrator().time_offset();
     stats_->t_ck_vec.resize(vicalib_->GetCalibrator().NumCameras());
     stats_->cam_intrinsics.resize(vicalib_->GetCalibrator().NumCameras());
     for (size_t ii = 0; ii < vicalib_->GetCalibrator().NumCameras(); ++ii) {

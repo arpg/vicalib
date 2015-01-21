@@ -24,6 +24,7 @@ struct CalibrationStats {
   explicit CalibrationStats(int nstreams) : cam_names(nstreams),
                                             num_frames_processed(nstreams, 0),
                                             reprojection_error(nstreams, 0),
+                                            ts(0),
                                             t_ck_vec(nstreams, Sophus::SE3d()),
                                             cam_intrinsics(nstreams,
                                                            Eigen::VectorXd()),
@@ -33,6 +34,7 @@ struct CalibrationStats {
   std::vector<std::string> cam_names;
   std::vector<int> num_frames_processed;
   std::vector<double> reprojection_error;
+  double ts;
   std::vector<Sophus::SE3d> t_ck_vec;
   std::vector<Eigen::VectorXd> cam_intrinsics;
   double total_mse;

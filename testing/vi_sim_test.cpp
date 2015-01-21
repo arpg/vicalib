@@ -7,6 +7,7 @@
 #define LOGDIFF_TOLERANCE 1e-3
 #define REPROJ_TOLERANCE 1e-1
 #define CAMERA_TOLERANCE 5
+#define TIMEOFFSET_TOLERANCE 1e-4
 
 TEST(ViTests, ViSimTest) {
   std::cout << "Running test: Vi Sim" << std::endl;
@@ -88,5 +89,7 @@ TEST(ViTests, ViSimTest) {
               << "Parameter error too high for camera " << ii
               << ". Estimate: " << stats->cam_intrinsics[ii].transpose()
               << ". Ground truth: " << cam_intrinsics_ground_truth.transpose();
+      EXPECT_LT(stats->ts, TIMEOFFSET_TOLERANCE)
+              << "Time offset is incorrect.";
   }
 }

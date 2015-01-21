@@ -414,6 +414,9 @@ class ViCalibrator : public ceres::IterationCallback {
   // Return number of synchronised camera rig frames.
   size_t NumFrames() const { return t_wk_.size(); }
 
+  // Getter for time offset.
+  double time_offset() const { return imu_.time_offset_; }
+
   // Return pose of camera rig frame i.
   std::shared_ptr<VicalibFrame<double> > GetFrame(size_t i) {
     CHECK_LT(i, t_wk_.size()) << "GetFrame(): Frame index is greater than "
