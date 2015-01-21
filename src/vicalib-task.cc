@@ -541,17 +541,23 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
     // If we're finding the time offset, initialize it here.
     if (FLAGS_find_time_offset && FLAGS_calibrate_imu &&
-        !FLAGS_use_system_time &&
         image_time_offset == -1) {
-      if(calibrator_.imu_buffer().elements_.size() != 0){
-        image_time_offset =
-            (calibrator_.imu_buffer().elements_[0].time - timestamp);
-
-        LOG(WARNING) << "Setting initial time offset to " << image_time_offset;
+      if (FLAGS_use_system_time) {
+        // Then there is no need to set the image time offset, as timestamps
+        // should already be synchronized.
+        image_time_offset = 0;
       } else {
-        LOG(WARNING) << "Not added due to missing IMU.";
-        valid_frames.assign(images_->Size(), false);
-        return valid_frames;
+        if(calibrator_.imu_buffer().elements_.size() != 0){
+          image_time_offset =
+              (calibrator_.imu_buffer().elements_[0].time - timestamp);
+
+          LOG(INFO) << "Setting initial time offset to " <<
+                       image_time_offset;
+        } else {
+          LOG(INFO) << "Not added due to missing IMU.";
+          valid_frames.assign(images_->Size(), false);
+          return valid_frames;
+        }
       }
     }
 
