@@ -541,17 +541,23 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
     // If we're finding the time offset, initialize it here.
     if (FLAGS_find_time_offset && FLAGS_calibrate_imu &&
-        !FLAGS_use_system_time &&
         image_time_offset == -1) {
-      if(calibrator_.imu_buffer().elements_.size() != 0){
-        image_time_offset =
-            (calibrator_.imu_buffer().elements_[0].time - timestamp);
-
-        LOG(WARNING) << "Setting initial time offset to " << image_time_offset;
+      if (FLAGS_use_system_time) {
+        // Then there is no need to set the image time offset, as timestamps
+        // should already be synchronized.
+        image_time_offset = 0;
       } else {
-        LOG(WARNING) << "Not added due to missing IMU.";
-        valid_frames.assign(images_->Size(), false);
-        return valid_frames;
+        if(calibrator_.imu_buffer().elements_.size() != 0){
+          image_time_offset =
+              (calibrator_.imu_buffer().elements_[0].time - timestamp);
+
+          LOG(INFO) << "Setting initial time offset to " <<
+                       image_time_offset;
+        } else {
+          LOG(INFO) << "Not added due to missing IMU.";
+          valid_frames.assign(images_->Size(), false);
+          return valid_frames;
+        }
       }
     }
 
@@ -667,7 +673,7 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
     }
   }
 
-  // Now, coparison for extrinsics will start.
+  // Now, comparison for extrinsics will start.
   // First, comparison of psoition of camera. Comparison here is done by
   // calculating distance as that requires user to specify only one threshold.
   Eigen::Vector3d lastTrans = last.T_ck.translation();
@@ -733,12 +739,12 @@ bool IMUCalibrationDiffer(const Vector6d &last,
 
 bool VicalibTask::IsSuccessful() const {
   std::vector<double> errors = calibrator_.GetCameraProjRMSE();
-  for (size_t i = 0; i < nstreams_; ++i) {
-    if (errors[i] > max_reproj_errors_[i]) {
-      LOG(WARNING) << "Reprojection error of " << errors[i]
+  for (size_t ii = 0; ii < nstreams_; ++ii) {
+    if (errors[ii] > max_reproj_errors_[ii]) {
+      LOG(WARNING) << "Reprojection error of " << errors[ii]
                    << " was greater than maximum of "
-                   << max_reproj_errors_[i]
-                   << " for camera " << i;
+                   << max_reproj_errors_[ii]
+                   << " for camera " << ii;
       return false;
     }
   }

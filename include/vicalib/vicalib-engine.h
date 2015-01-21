@@ -46,6 +46,7 @@ class VicalibEngine {
   void Run();
   bool CameraLoop();
   void ImuHandler(const pb::ImuMsg& imu);
+  std::shared_ptr<CalibrationStats> stats() { return stats_; }
 
  protected:
   std::shared_ptr<VicalibTask> InitTask();

@@ -388,6 +388,13 @@ class ViCalibrator : public ceres::IterationCallback {
           calibu::ProjectionKannalaBrandt::NUM_PARAMS>(
           new ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>(p_w,
                                                                           p_c));
+    } else if (dynamic_cast<calibu::CameraModelT<  // NOLINT
+                   calibu::Pinhole>*>(&interface)) {
+      cost->Cost() = new ceres::AutoDiffCostFunction<
+          ImuReprojectionCostFunctor<calibu::Pinhole>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Pinhole::NUM_PARAMS>(
+          new ImuReprojectionCostFunctor<calibu::Pinhole>(p_w, p_c));
 
     } else {
       LOG(FATAL) << "Don't know how to optimize CameraModel: "
@@ -406,6 +413,9 @@ class ViCalibrator : public ceres::IterationCallback {
 
   // Return number of synchronised camera rig frames.
   size_t NumFrames() const { return t_wk_.size(); }
+
+  // Getter for time offset.
+  double time_offset() const { return imu_.time_offset_; }
 
   // Return pose of camera rig frame i.
   std::shared_ptr<VicalibFrame<double> > GetFrame(size_t i) {
@@ -586,6 +596,11 @@ class ViCalibrator : public ceres::IterationCallback {
       for (size_t kk = 0; kk < imu_costs_.size(); ++kk) {
         calibu::CostFunctionAndParams& cost = *imu_costs_[kk];
         problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params());
+      }
+
+      if (optimize_rotation_only_) {
+        LOG(INFO) << "Optimizing rotation only...";
+        problem->SetParameterBlockConstant(imu_.g_.data());
       }
 
       // only do this once
@@ -856,6 +871,7 @@ class ViCalibrator : public ceres::IterationCallback {
               LOG(INFO) << "Finished optimizing rotations. Activating T_ck "
                            "translation optimization..." << std::endl;
               optimize_rotation_only_ = false;
+              problem_->SetParameterBlockVariable(imu_.g_.data());
             // } else if (!is_bias_active_) {
               is_bias_active_ = true;
               LOG(INFO) << "Activating bias terms... " << std::endl;
