@@ -17,6 +17,7 @@
 
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 DECLARE_bool(has_initial_guess);  // Defined in vicalib-engine.cc.
+DECLARE_bool(output_conics);			// Defined in vicalib-engine.cc.
 DECLARE_string(imu);              // Defined in vicalib-engine.cc.
 DEFINE_bool(find_time_offset, true,
             "Optimize for the time offset between the IMU and images");
@@ -267,9 +268,31 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
+    // Print out the binary pattern of the grid in which we're interested.
+    // std::ofstream("target.csv", std::ios_base::trunc) <<
+    //   target_[ii].GetBinaryPattern(0) << std::endl;
+
+    std::ofstream img_csv_file;
     // Generate map and point structures
     for (size_t i = 0; i < conics.size(); ++i) {
       ellipses[ii].push_back(conics[i].center);
+      if (FLAGS_output_conics) {
+        if (!img_csv_file.is_open()) {
+          img_csv_file.open("conics.csv", std::ios_base::app);
+        }
+        const Eigen::Vector3d& pos_3d =
+            target_[ii].Circles3D()[ellipse_target__map[i]];
+        img_csv_file << num_frames_ << "," << ellipse_target__map[i] <<
+                        "," << conics[i].center[0] << "," <<
+                        conics[i].center[1] << "," <<
+                        pos_3d[0] << "," << pos_3d[1] << "," << pos_3d[2] <<
+                        std::endl;
+      }
+
+    }
+
+    if (img_csv_file.is_open()) {
+      img_csv_file.close();
     }
 
     // find camera pose given intrinsics

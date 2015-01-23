@@ -44,6 +44,8 @@ DEFINE_double(grid_spacing, 0.01355/*0.254 / (19 - 1) meters */,
 DEFINE_int32(grid_seed, 71, "seed used to generate the grid.");
 DEFINE_bool(has_initial_guess, false,
             "Whether or not the given calibration file has a valid guess.");
+DEFINE_bool(output_conics, false,
+            "Output center of found conics to the file ./conics.csv.");
 DEFINE_string(grid_preset, "",
              "Which grid preset to use. "
              "Must be a visual_inertial_calibration::GridPreset or an alias. "
