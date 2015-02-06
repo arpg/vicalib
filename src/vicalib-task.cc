@@ -17,6 +17,7 @@
 
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 DECLARE_bool(has_initial_guess);  // Defined in vicalib-engine.cc.
+DECLARE_bool(output_conics);			// Defined in vicalib-engine.cc.
 DECLARE_string(imu);              // Defined in vicalib-engine.cc.
 DEFINE_bool(find_time_offset, true,
             "Optimize for the time offset between the IMU and images");
@@ -270,6 +271,20 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     // Generate map and point structures
     for (size_t i = 0; i < conics.size(); ++i) {
       ellipses[ii].push_back(conics[i].center);
+      if (FLAGS_output_conics) {
+        const Eigen::Vector3d& pos_3d =
+            target_[ii].Circles3D()[ellipse_target__map[i]];
+       if( ellipse_target__map[i] < 0 ){
+         continue;
+       }
+
+       std::cout << num_frames_ << "," << ellipse_target__map[i] <<
+                        "," << conics[i].center[0] << "," <<
+                        conics[i].center[1] << "," <<
+                        pos_3d[0] << "," << pos_3d[1] << "," << pos_3d[2] <<
+                        std::endl;
+      }
+
     }
 
     // find camera pose given intrinsics
