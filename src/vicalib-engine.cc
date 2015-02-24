@@ -55,6 +55,7 @@ DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
              "Number of frames to process before calibration begins.");
+DEFINE_bool(print_poses, false, "Output poses to poses.txt");
 DEFINE_string(output, "cameras.xml",
               "Output XML file to write camera models to.");
 DEFINE_string(output_log_file, "vicalibrator.log",
@@ -247,6 +248,9 @@ void Draw(const std::shared_ptr<VicalibTask>& task) {
 
 void VicalibEngine::WriteCalibration() {
   vicalib_->GetCalibrator().WriteCameraModels(FLAGS_output);
+  if (FLAGS_print_poses) {
+    vicalib_->GetCalibrator().WritePoses();
+  }
 }
 
 void VicalibEngine::CalibrateAndDrawLoop() {

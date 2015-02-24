@@ -29,6 +29,7 @@
 #include <calibu/image/ImageProcessing.h>
 #include <calibu/target/TargetGridDot.h>
 #include <PbMsgs/ImageArray.h>
+#include <PbMsgs/Logger.h>
 #include <gflags/gflags.h>
 #include <sophus/se3.hpp>
 
@@ -73,6 +74,7 @@ class VicalibTask {
   bool IsRunning();
   void Finish(const std::string& output_filename);
   void Draw();
+  void WritePoses();
   ViCalibrator& GetCalibrator() { return calibrator_; }
 
   double GetMeanSquaredError() {
@@ -108,6 +110,7 @@ class VicalibTask {
   size_t nstreams_;
   std::vector<size_t> width_;
   std::vector<size_t> height_;
+  pb::Logger& logger_;
   int calib_frame_;
   std::vector<bool> tracking_good_;
   aligned_vector<Sophus::SE3d> t_cw_;

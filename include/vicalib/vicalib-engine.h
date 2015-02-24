@@ -50,7 +50,7 @@ class VicalibEngine {
 
  protected:
   std::shared_ptr<VicalibTask> InitTask();
-  void WriteCalibration();
+  void WriteCalibration();  
   void CalibrateAndDrawLoop();
   bool SeenEnough() const;
   void CreateGrid();

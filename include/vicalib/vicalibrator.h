@@ -151,6 +151,51 @@ class ViCalibrator : public ceres::IterationCallback {
   // Return the root mean squared error of the camera reprojections.
   std::vector<double> GetCameraProjRMSE() const { return camera_proj_rmse_; }
 
+  inline Eigen::Matrix<double, 6, 1> _T2Cart(const Eigen::Matrix4d& T) {
+    Eigen::Matrix<double, 6, 1> Cart;
+    Eigen::Matrix<double, 3, 3> R = T.block<3, 3>(0, 0);
+    Eigen::Vector3d rpq;
+    // roll
+    rpq[0] = atan2(R(2, 1), R(2, 2));
+
+    // pitch
+    double det = -R(2, 0) * R(2, 0) + 1.0;
+    if (det <= 0) {
+      if (R(2, 0) > 0) {
+        rpq[1] = -M_PI / 2.0;
+      } else {
+        rpq[1] = M_PI / 2.0;
+      }
+    } else {
+      rpq[1] = -asin(R(2, 0));
+    }
+
+    // yaw
+    rpq[2] = atan2(R(1, 0), R(0, 0));
+
+    Cart[0] = T(0, 3);
+    Cart[1] = T(1, 3);
+    Cart[2] = T(2, 3);
+    Cart[3] = rpq[0];
+    Cart[4] = rpq[1];
+    Cart[5] = rpq[2];
+
+    return Cart;
+  }
+
+
+  // Write XML file containing configuration of camera rig.
+  void WritePoses( void ) {
+    FILE* f = fopen("poses.txt", "w");
+    for (int ii = 0; ii < t_wk_.size(); ii++) {
+      Eigen::Matrix<double, 6, 1> pose;
+      pose = _T2Cart(t_wk_[ii]->t_wp_.matrix());
+      fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n", pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));
+    }
+    fclose(f);
+  }
+
+
   // Write XML file containing configuration of camera rig.
   void WriteCameraModels(const std::string& filename) {
     calibu::CameraRig rig;

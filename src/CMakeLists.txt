@@ -14,6 +14,7 @@ find_package(OpenCV2)
 find_package(Pangolin)
 find_package(PbMsgs)
 find_package(MINIGLOG)
+find_package(Protobuf)
 
 # Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
 if(FREEGLUT_FOUND AND NOT HAVE_MODIFIED_OSXGLUT)
@@ -30,6 +31,7 @@ list(APPEND LINK_LIBS
   ${Calibu_LIBRARIES}
   ${CERES_LIBRARIES}
   ${CVARS_LIBRARY}
+  ${PROTOBUF_LIBRARY}
   ${GFLAGS_LIBRARIES}
   ${GLOG_LIBRARIES}
   ${OpenCV2_LIBRARIES}
@@ -39,6 +41,7 @@ list(APPEND LINK_LIBS
 
 list(APPEND PROJ_INCLUDE_DIRS
   ${Pangolin_INCLUDE_DIRS}
+  ${PROTOBUF_INCLUDE_DIR}
   ${HAL_INCLUDE_DIRS}
   ${Calibu_INCLUDE_DIRS}
   ${CVARS_INCLUDE_DIRS}
