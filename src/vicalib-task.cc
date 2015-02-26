@@ -278,9 +278,6 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     }
 
     if (FLAGS_clip_good) {
-//      cv::imshow("testing", img->Mat());
-//      fprintf(stderr, "%d x %d\n", img->Width(), img->Height());
-//      cv::waitKey();
       pb::ImageMsg* img_message = pbMsg.mutable_camera()->add_image();
       img_message->set_height(img->Height());
       img_message->set_width(img->Width());
