@@ -247,6 +247,8 @@ int VicalibTask::AddFrame(double frame_time) {
 void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
+  pb::Msg pbMsg;
+  pbMsg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {
@@ -276,15 +278,20 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     }
 
     if (FLAGS_clip_good) {
-      pb::Msg pbMsg;
-      pbMsg.Clear();
+//      cv::imshow("testing", img->Mat());
+//      fprintf(stderr, "%d x %d\n", img->Width(), img->Height());
+//      cv::waitKey();
       pb::ImageMsg* img_message = pbMsg.mutable_camera()->add_image();
       img_message->set_height(img->Height());
       img_message->set_width(img->Width());
-      img_message->set_data(img->data(), img->Height()*img->Width());
-      img_message->set_format( static_cast<pb::Format >(img->Format()) );
-      img_message->set_type( static_cast<pb::Type >(img->Type()) );
-      logger_.LogMessage(pbMsg);
+      cv::Mat image(img->Height(), img->Width(), CV_8UC1);
+      memcpy(img->Mat().data, image.data, img->Height()*img->Width());
+      img_message->set_data(image.data, img->Height()*img->Width());
+      img_message->set_format( pb::PB_LUMINANCE );
+      img_message->set_type( pb::PB_UNSIGNED_BYTE );
+      if (ii == n - 1) {
+        logger_.LogMessage(pbMsg);
+      }
     }
 
 
