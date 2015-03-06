@@ -391,6 +391,12 @@ void VicalibEngine::CreateGrid() {
           SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
     }
     LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
+    if (!eps) {
+      LOG(INFO) << "You may convert the file into PDF with ImageMagick:"
+                << std::endl
+                << "convert -density 300 " << FLAGS_output_pattern_file << " "
+                << FLAGS_output_pattern_file << ".pdf";
+    }
   }
 }
 
