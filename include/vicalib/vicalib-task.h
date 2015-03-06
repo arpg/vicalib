@@ -24,7 +24,7 @@
 #include <memory>
 
 #include <Eigen/StdVector>
-#include <calibu/cam/CameraModelT.h>
+#include <calibu/cam/camera_crtp.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/image/ImageProcessing.h>
 #include <calibu/target/TargetGridDot.h>
