@@ -277,7 +277,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
-    if (FLAGS_clip_good) {
+    if (FLAGS_clip_good && tracking_good_[ii]) {
       pb::ImageMsg* img_message = pbMsg.mutable_camera()->add_image();
       img_message->set_height(img->Height());
       img_message->set_width(img->Width());
@@ -400,16 +400,16 @@ inline Eigen::Matrix<double, 6, 1> _T2Cart(const Eigen::Matrix4d& T) {
 }
 
 
-void VicalibTask::WritePoses()
-{
-  FILE* f = fopen("poses.txt", "w");
-  for (int ii = 0; ii < t_cw_.size(); ii++) {
-    Eigen::Matrix<double, 6, 1> pose;
-    pose = _T2Cart(t_cw_[ii].matrix());
-    fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n", pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));
-  }
-  fclose(f);
-}
+//void VicalibTask::WritePoses()
+//{
+//  FILE* f = fopen("poses.txt", "w");
+//  for (int ii = 0; ii < t_cw_.size(); ii++) {
+//    Eigen::Matrix<double, 6, 1> pose;
+//    pose = _T2Cart(t_cw_[ii].inverse().matrix());
+//    fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n", pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));
+//  }
+//  fclose(f);
+//}
 
 #ifdef HAVE_PANGOLIN
 
