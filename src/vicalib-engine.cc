@@ -172,6 +172,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
       params_ << 300, 300, w/2.0, h/2.0, 0.2;
       std::shared_ptr<calibu::CameraInterface<double>>
           starting_cam(new calibu::FovCamera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_w");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     //} else if (type == "poly2") {
     //  calibu::CameraModelT<calibu::Poly2> starting_cam(w, h);
@@ -184,6 +185,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
       params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
       std::shared_ptr<calibu::CameraInterface<double>>
           starting_cam(new calibu::Poly3Camera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     //} else if (type == "kb4") {
     //  calibu::CameraModelT<calibu::ProjectionKannalaBrandt> starting_cam(w, h);
@@ -192,8 +194,11 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     } else if (type == "linear") {
       Eigen::Vector2i size_;
       Eigen::VectorXd params_(4);
+      size_ << w, h;
+      params_ << 300, 300, w/2.0, h/2.0;
       std::shared_ptr<calibu::CameraInterface<double>>
           starting_cam(new calibu::LinearCamera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     }
     input_cameras.back().camera->SetRDF(calibu::RdfRobotics.matrix());
