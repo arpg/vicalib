@@ -284,9 +284,11 @@ void VicalibEngine::WriteCalibration() {
     FILE* f = fopen("poses.txt", "w");
     Eigen::Matrix<double, 6, 1> pose;
 
-    for (int ii = 0; ii < vicalib_->GetCalibrator().NumFrames(); ii++) {
-      std::shared_ptr<VicalibFrame<double> > frame = vicalib_->GetCalibrator().GetFrame(ii);
-      if (frame->has_measurements_from_cam[0]) {
+    std::vector<bool> good_frames = vicalib_->GetGoodFrames( );
+
+    for (int ii = 0; ii < good_frames.size(); ii++) {
+      if (good_frames[ii]) {
+        std::shared_ptr<VicalibFrame<double> > frame = vicalib_->GetCalibrator().GetFrame(ii);
         pose = _T2Cart(frame->t_wp_.matrix());
         fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n",
                 pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));

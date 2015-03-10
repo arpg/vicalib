@@ -4,7 +4,7 @@
 #include <vicalib/vicalib-task.h>
 
 #include <time.h>
-
+#include <random.h>
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
@@ -251,9 +251,12 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   pbMsg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
-    if (!valid_frames[ii]) {
+    if (!valid_frames[ii]) {      
       LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
+      if (ii == 0){
+        good_frame_.push_back(false);
+      }
       continue;
     }
 
@@ -277,7 +280,8 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
-    if (FLAGS_clip_good && tracking_good_[ii]) {
+    if (FLAGS_clip_good && tracking_good_[ii] && (ii == 0)) {
+      good_frame_.push_back(true);
       pb::ImageMsg* img_message = pbMsg.mutable_camera()->add_image();
       img_message->set_height(img->Height());
       img_message->set_width(img->Width());

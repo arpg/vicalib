@@ -69,7 +69,7 @@ class VicalibTask {
   std::vector<bool> AddSuperFrame(const std::shared_ptr<pb::ImageArray>& imgs);
 
   void AddIMU(const pb::ImuMsg& imu);
-
+  std::vector<bool> GetGoodFrames( void ) { return good_frame_; }
   void Start(bool has_initial_guess);
   bool IsRunning();
   void Finish(const std::string& output_filename);
@@ -113,6 +113,7 @@ class VicalibTask {
   pb::Logger& logger_;
   int calib_frame_;
   std::vector<bool> tracking_good_;
+  std::vector<bool> good_frame_;
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
