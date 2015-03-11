@@ -365,13 +365,13 @@ class ViCalibrator : public ceres::IterationCallback {
           calibu::FovCamera<double>::NumParams>(
           new ImuReprojectionCostFunctor<calibu::FovCamera<double>>(p_w, p_c));
 
-    //} else if (dynamic_cast<calibu::CameraModelT<calibu::Poly2>*>(
-    //               &interface)) {  // NOLINT
-    //  cost->Cost() = new ceres::AutoDiffCostFunction<
-    //      ImuReprojectionCostFunctor<calibu::Poly2>, 2,
-    //      Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-    //      calibu::Poly2::NUM_PARAMS>(
-    //      new ImuReprojectionCostFunctor<calibu::Poly2>(p_w, p_c));
+    } else if (dynamic_cast<calibu::Poly2Camera<double>*>(
+                   interface.get())) {  // NOLINT
+      cost->Cost() = new ceres::AutoDiffCostFunction<
+          ImuReprojectionCostFunctor<calibu::Poly2Camera<double>>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::Poly2Camera<double>::NumParams>(
+          new ImuReprojectionCostFunctor<calibu::Poly2Camera<double>>(p_w, p_c));
 
     } else if (dynamic_cast<calibu::Poly3Camera<double>*>( interface.get())) {  // NOLINT
       cost->Cost() = new ceres::AutoDiffCostFunction<
@@ -380,14 +380,12 @@ class ViCalibrator : public ceres::IterationCallback {
           calibu::Poly3Camera<double>::NumParams>(
           new ImuReprojectionCostFunctor<calibu::Poly3Camera<double>>(p_w, p_c));
 
-    //} else if (dynamic_cast<calibu::CameraModelT<  // NOLINT
-    //               calibu::ProjectionKannalaBrandt>*>(&interface)) {
-    //  cost->Cost() = new ceres::AutoDiffCostFunction<
-    //      ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>, 2,
-    //      Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-    //      calibu::ProjectionKannalaBrandt::NUM_PARAMS>(
-    //      new ImuReprojectionCostFunctor<calibu::ProjectionKannalaBrandt>(p_w,
-    //                                                                      p_c));
+    } else if (dynamic_cast<calibu::KannalaBrandtCamera<double>*>( interface.get())) {
+      cost->Cost() = new ceres::AutoDiffCostFunction<
+          ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>, 2,
+          Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+          calibu::KannalaBrandtCamera<double>::NumParams>(
+          new ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>(p_w, p_c));
     } else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
           ImuReprojectionCostFunctor<calibu::LinearCamera<double>>, 2,
