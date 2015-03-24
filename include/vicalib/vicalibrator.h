@@ -324,7 +324,8 @@ class ViCalibrator : public ceres::IterationCallback {
       imu_buffer_.AddElement(ImuMeasurementT<double>(gyro, accel, time));
       return true;
     } else {
-      return false;
+      LOG(FATAL) << "Timestamps are not unique!";
+      //return false;
     }
   }
 
