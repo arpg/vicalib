@@ -173,11 +173,11 @@ function(install_package)
   # In case we want to export.
   elseif( EXPORT_${PROJECT_NAME} )
 
-        # add "installed" library to list of required libraries to link against
-        if( PACKAGE_LIB_NAME )
-            list( APPEND PACKAGE_LINK_LIBS ${PACKAGE_LIB_NAME} )
+      if( PACKAGE_LIB_NAME )
+            cmake_policy( SET CMP0026 OLD )
+            get_target_property( _target_library ${PACKAGE_LIB_NAME} LOCATION )
+            list( APPEND PACKAGE_LINK_LIBS ${_target_library} )
         endif()
-
 
         if( PACKAGE_INSTALL_HEADER_DIRS )
             foreach(dir IN LISTS PACKAGE_INSTALL_HEADER_DIRS )
@@ -196,9 +196,9 @@ function(install_package)
             ${CMAKE_CURRENT_BINARY_DIR}/include )
 
         # install library itself
-        if( PACKAGE_LIB_NAME )
-            set( PACKAGE_LIB_LINK "-l${PACKAGE_LIB_NAME}" )
-        endif()
+        #if( PACKAGE_LIB_NAME )
+        #    set( PACKAGE_LIB_LINK "-l${PACKAGE_LIB_NAME}" )
+        #endif()
    #######################################################
   # Export library for easy inclusion from other cmake projects. APPEND allows
   # call to function even as subdirectory of larger project.

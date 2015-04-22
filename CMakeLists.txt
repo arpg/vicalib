@@ -43,7 +43,7 @@ endif()
 ################################################################################
 # Find required dependencies
 
-find_package(Calibu CONFIG)
+find_package(Calibu)
 find_package(Ceres)
 find_package(CVars)
 find_package(GFlags)

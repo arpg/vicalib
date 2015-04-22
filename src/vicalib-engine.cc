@@ -11,7 +11,7 @@
 #include <calibu/target/RandomGrid.h>
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
-#include <HAL/Matrix.h>
+#include <HAL/Messages/Matrix.h>
 
 #include <vicalib/eigen-alignment.h>
 #include <vicalib/grid-definitions.h>
@@ -218,7 +218,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     input_cameras.back().camera->SetRDF(calibu::RdfRobotics.matrix());
   }
 
-  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  std::shared_ptr<hal::ImageArray> images = hal::ImageArray::Create();
   camera_->Capture(*images);
   for (size_t i = 0; i < images->Size() && i < input_cameras.size(); ++i) {
     input_cameras[i].camera->SetSerialNumber(images->at(i)->SerialNumber());
@@ -436,12 +436,12 @@ bool VicalibEngine::CameraLoop() {
   }
 #endif
 
-  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  std::shared_ptr<hal::ImageArray> images = hal::ImageArray::Create();
   bool captured = camera_->Capture(*images);
   if (captured) {
     cv::Mat temp_mat;
     for (int ii = 0; ii < images->Size(); ++ii) {
-      std::shared_ptr<pb::Image> img = images->at(ii);
+      std::shared_ptr<hal::Image> img = images->at(ii);
       if (img->Mat().channels() == 3) {
         cv::cvtColor(img->Mat(), temp_mat, CV_BGR2GRAY);
       }
@@ -479,7 +479,7 @@ bool VicalibEngine::CameraLoop() {
   return captured;
 }
 
-void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
+void VicalibEngine::ImuHandler(const hal::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 

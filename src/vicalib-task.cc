@@ -251,7 +251,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
-    std::shared_ptr<pb::Image> img = images_->at(ii);
+    std::shared_ptr<hal::Image> img = images_->at(ii);
     image_processing_[ii].Process(img->data(),
                                   img->Width(),
                                   img->Height(),
@@ -537,7 +537,7 @@ void VicalibTask::Finish(const std::string& output_filename) {
 }
 
 std::vector<bool> VicalibTask::AddSuperFrame(
-    const std::shared_ptr<pb::ImageArray>& images) {
+    const std::shared_ptr<hal::ImageArray>& images) {
   images_ = images;
 
   int num_new_frames = 0;
@@ -547,7 +547,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
-    std::shared_ptr<pb::Image> image = images_->at(ii);
+    std::shared_ptr<hal::Image> image = images_->at(ii);
 
     const double timestamp =
         FLAGS_use_system_time ? images->Ref().system_time() :
@@ -604,7 +604,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   return valid_frames;
 }
 
-void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
+void VicalibTask::AddIMU(const hal::ImuMsg& imu) {
   if (!imu.has_accel()) {
     LOG(ERROR) << "ImuMsg missing accelerometer readings";
   } else if (!imu.has_gyro()) {
