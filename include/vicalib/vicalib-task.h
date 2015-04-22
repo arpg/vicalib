@@ -28,7 +28,7 @@
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/image/ImageProcessing.h>
 #include <calibu/target/TargetGridDot.h>
-#include <PbMsgs/ImageArray.h>
+#include <Messages/ImageArray.h>
 #include <gflags/gflags.h>
 #include <sophus/se3.hpp>
 

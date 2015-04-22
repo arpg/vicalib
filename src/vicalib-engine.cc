@@ -11,7 +11,7 @@
 #include <calibu/target/RandomGrid.h>
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
-#include <PbMsgs/Matrix.h>
+#include <HAL/Matrix.h>
 
 #include <vicalib/eigen-alignment.h>
 #include <vicalib/grid-definitions.h>
