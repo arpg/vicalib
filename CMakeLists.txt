@@ -42,15 +42,14 @@ endif()
 
 ################################################################################
 # Find required dependencies
-
-find_package(Calibu)
-find_package(Ceres)
-find_package(CVars)
-find_package(GFlags)
-find_package(GLog)
-find_package(HAL)
-find_package(OpenCV2)
-find_package(Pangolin)
+find_package( Calibu REQUIRED )
+find_package( Ceres REQUIRED )
+find_package( CVars REQUIRED )
+find_package( GFlags REQUIRED )
+find_package( GLog REQUIRED )
+find_package( HAL REQUIRED )
+find_package( OpenCV2 REQUIRED )
+find_package( Pangolin REQUIRED )
 
 # Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
 if(FREEGLUT_FOUND AND NOT HAVE_MODIFIED_OSXGLUT)
@@ -61,6 +60,9 @@ elseif(GLUT_FOUND)
   list(APPEND LIB_INC_DIR  ${GLUT_INCLUDE_DIR} )
   list(APPEND LINK_LIBS ${GLUT_LIBRARY} )
 endif()
+
+
+message( STATUS "HAL_LIBRARIES ${HAL_LIBRARIES}")
 
 list(APPEND LINK_LIBS
   ${HAL_LIBRARIES}
