@@ -101,8 +101,9 @@ VicalibTask::VicalibTask(
     t_cw_(num_streams),
     num_frames_(0),
     calibrator_(),
-  input_cameras_(input_cameras),
+    input_cameras_(input_cameras),
     max_reproj_errors_(max_reproj_errors),
+    image_time_offset(-1),
 
 #ifdef HAVE_PANGOLIN
     textures_(nstreams_),
@@ -110,8 +111,7 @@ VicalibTask::VicalibTask(
     imu_strips_(),
     handler_(stacks_),
 #endif  // HAVE_PANGOLIN
-    options_(nullptr),
-  image_time_offset(-1) {
+    options_(nullptr) {
   for (size_t i = 0; i < nstreams_; ++i) {
     image_processing_.emplace_back(width[i], height[i]);
     image_processing_[i].Params().black_on_white = true;
