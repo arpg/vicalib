@@ -8,7 +8,7 @@
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
-#include <Messages/Matrix.h>
+#include <HAL/Messages/Matrix.h>
 
 #ifdef HAVE_PANGOLIN
 #include <calibu/gl/Drawing.h>

@@ -139,7 +139,7 @@ set(EXPORT_VICALIB_INC
   )
 
 install_package(
-    PKG_NAME VICALIB
+  PKG_NAME VICALIB
   LIB_NAME vicalib
   VERSION ${VICALIB_VERSION}
   DESCRIPTION "Visual-inertial calibration routine."
@@ -167,8 +167,8 @@ if( BUILD_APPLICATIONS )
 endif()
 
 ###########################
- include(${CMAKE_MODULE_PATH}/cmake_uninstall.cmake.in)
+include(${CMAKE_MODULE_PATH}/cmake_uninstall.cmake.in)
 
- add_custom_target(uninstall
+add_custom_target(uninstall
      COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 ###########################
