@@ -5,7 +5,6 @@ if(POLICY CMP0042)
     cmake_policy(SET CMP0042 NEW) # MACOSX_RPATH
 endif()
 
-
 set( CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/)
 include( install_package )
 include( def_executable )
@@ -60,9 +59,6 @@ elseif(GLUT_FOUND)
   list(APPEND LIB_INC_DIR  ${GLUT_INCLUDE_DIR} )
   list(APPEND LINK_LIBS ${GLUT_LIBRARY} )
 endif()
-
-
-message( STATUS "HAL_LIBRARIES ${HAL_LIBRARIES}")
 
 list(APPEND LINK_LIBS
   ${HAL_LIBRARIES}
