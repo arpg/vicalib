@@ -8,7 +8,7 @@
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
-#include <PbMsgs/Matrix.h>
+#include <HAL/Messages/Matrix.h>
 
 #ifdef HAVE_PANGOLIN
 #include <calibu/gl/Drawing.h>
@@ -101,8 +101,9 @@ VicalibTask::VicalibTask(
     t_cw_(num_streams),
     num_frames_(0),
     calibrator_(),
-  input_cameras_(input_cameras),
+    input_cameras_(input_cameras),
     max_reproj_errors_(max_reproj_errors),
+    image_time_offset(-1),
 
 #ifdef HAVE_PANGOLIN
     textures_(nstreams_),
@@ -110,8 +111,7 @@ VicalibTask::VicalibTask(
     imu_strips_(),
     handler_(stacks_),
 #endif  // HAVE_PANGOLIN
-    options_(nullptr),
-  image_time_offset(-1) {
+    options_(nullptr) {
   for (size_t i = 0; i < nstreams_; ++i) {
     image_processing_.emplace_back(width[i], height[i]);
     image_processing_[i].Params().black_on_white = true;
@@ -133,11 +133,14 @@ VicalibTask::VicalibTask(
                                               input_cameras[ii].T_ck);
     } else {
       // Generic starting set of parameters.
-      calibu::CameraModelT<calibu::Fov> starting_cam(w_i, h_i);
-      starting_cam.Params() << 300, 300, w_i / 2.0, h_i / 2.0, 0.2;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_;
+      size_ << w_i, h_i;
+      params_ << 300, 300, w_i / 2.0, h_i / 2.0, 0.2;
+      std::shared_ptr<calibu::FovCamera<double>>
+          starting_cam(new calibu::FovCamera<double>(params_, size_));
 
-      calib_cams_[ii] = calibrator_.AddCamera(calibu::CameraModel(starting_cam),
-                                              Sophus::SE3d());
+      calib_cams_[ii] = calibrator_.AddCamera( starting_cam, Sophus::SE3d());
     }
   }
   SetupGUI();
@@ -248,7 +251,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
-    std::shared_ptr<pb::Image> img = images_->at(ii);
+    std::shared_ptr<hal::Image> img = images_->at(ii);
     image_processing_[ii].Process(img->data(),
                                   img->Width(),
                                   img->Height(),
@@ -355,7 +358,7 @@ void VicalibTask::Draw3d() {
   }
 
   for (size_t c = 0; c < calibrator_.NumCameras(); ++c) {
-    const Eigen::Matrix3d k_inv = calibrator_.GetCamera(c).camera.Kinv();
+    const Eigen::Matrix3d k_inv = calibrator_.GetCamera(c).camera->K().inverse();
 
     const CameraAndPose cap = calibrator_.GetCamera(c);
     const Sophus::SE3d t_ck = cap.T_ck;
@@ -468,7 +471,7 @@ void VicalibTask::Draw2d() {
         for (size_t k = 0; k < code_points.size(); k++) {
           const Eigen::Vector3d& xwp = code_points[k];
           Eigen::Vector2d pt;
-          pt = cap.camera.Project(t_cw_[c] * xwp);
+          pt = cap.camera->Project(t_cw_[c] * xwp);
           if (pt[0] < kImageBoundaryRegion ||
               pt[0] >= images_->at(c)->Width() - kImageBoundaryRegion ||
               pt[1] < kImageBoundaryRegion ||
@@ -534,7 +537,7 @@ void VicalibTask::Finish(const std::string& output_filename) {
 }
 
 std::vector<bool> VicalibTask::AddSuperFrame(
-    const std::shared_ptr<pb::ImageArray>& images) {
+    const std::shared_ptr<hal::ImageArray>& images) {
   images_ = images;
 
   int num_new_frames = 0;
@@ -544,7 +547,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
-    std::shared_ptr<pb::Image> image = images_->at(ii);
+    std::shared_ptr<hal::Image> image = images_->at(ii);
 
     const double timestamp =
         FLAGS_use_system_time ? images->Ref().system_time() :
@@ -601,7 +604,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   return valid_frames;
 }
 
-void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
+void VicalibTask::AddIMU(const hal::ImuMsg& imu) {
   if (!imu.has_accel()) {
     LOG(ERROR) << "ImuMsg missing accelerometer readings";
   } else if (!imu.has_gyro()) {
@@ -638,15 +641,15 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
 bool CameraCalibrationsDiffer(const CameraAndPose& last,
                          const CameraAndPose& current) {
   // First comparing intrinsics of the camera.
-  if (last.camera.Type() != current.camera.Type()) {
+  if (last.camera->Type() != current.camera->Type()) {
     LOG(ERROR) << "Camera calibrations are different types: "
-               << last.camera.Type() << " vs. "
-               << current.camera.Type();
+               << last.camera->Type() << " vs. "
+               << current.camera->Type();
     return true;
   }
 
-  Eigen::VectorXd lastParams = last.camera.GenericParams();
-  Eigen::VectorXd currentParams = current.camera.GenericParams();
+  Eigen::VectorXd lastParams = last.camera->GetParams();
+  Eigen::VectorXd currentParams = current.camera->GetParams();
 
   LOG(INFO) << "Comparing old camera calibration: " << lastParams
             << " to new calibration: " << currentParams;
@@ -669,12 +672,12 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
     return true;
   }
 
-  if (current.camera.Type() == "calibu_fu_fv_u0_v0" &&
+  if (current.camera->Type() == "FovCamera" &&
       std::abs(lastParams[4] - currentParams[4]) > FLAGS_max_fov_w_diff) {
     LOG(ERROR) << "fov distortion differs too much ("
                << lastParams[4] - currentParams[4] << ")";
     return true;
-  } else if (current.camera.Type() == "calibu_fu_fv_u0_v0_k1_k2_k3") {
+  } else if (current.camera->Type() == "Poly3Camera") {
     double d1 = std::abs(lastParams[4] - currentParams[4]);
     double d2 = std::abs(lastParams[5] - currentParams[5]);
     double d3 = std::abs(lastParams[6] - currentParams[6]);

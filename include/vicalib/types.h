@@ -69,11 +69,11 @@ struct PoseT {
 
   // Retreive the transform to world coordinates for a single camera.
   const Sophus::SE3Group<Scalar>& GetTsw(const unsigned int cam_id,
-                                         const calibu::CameraRigT<Scalar>& rig,
+                                         const std::shared_ptr<calibu::Rig<Scalar>> rig,
                                          const bool use_internal_t_sw) {
     while (t_sw.size() <= cam_id) {
       if (!use_internal_t_sw) {
-        t_sw.push_back((t_wp_ * rig.cameras[t_sw.size()].T_wc).inverse());
+        t_sw.push_back((t_wp_ * rig->cameras_[t_sw.size()].T_wc).inverse());
       } else {
         // this needs to be modified to work with stereo
         t_sw.push_back((t_wp_ * t_vs_).inverseb());

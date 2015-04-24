@@ -24,11 +24,11 @@
 #include <memory>
 
 #include <Eigen/StdVector>
-#include <calibu/cam/CameraModelT.h>
+#include <calibu/cam/camera_crtp.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/image/ImageProcessing.h>
 #include <calibu/target/TargetGridDot.h>
-#include <PbMsgs/ImageArray.h>
+#include <HAL/Messages/ImageArray.h>
 #include <gflags/gflags.h>
 #include <sophus/se3.hpp>
 
@@ -65,9 +65,9 @@ class VicalibTask {
   VicalibTask(const VicalibTask&) = delete;
   ~VicalibTask();
 
-  std::vector<bool> AddSuperFrame(const std::shared_ptr<pb::ImageArray>& imgs);
+  std::vector<bool> AddSuperFrame(const std::shared_ptr<hal::ImageArray>& imgs);
 
-  void AddIMU(const pb::ImuMsg& imu);
+  void AddIMU(const hal::ImuMsg& imu);
 
   void Start(bool has_initial_guess);
   bool IsRunning();
@@ -113,7 +113,7 @@ class VicalibTask {
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
-  std::shared_ptr<pb::ImageArray> images_;
+  std::shared_ptr<hal::ImageArray> images_;
   aligned_vector<CameraAndPose> input_cameras_;
   Vector6d input_imu_biases_;
   std::vector<double> max_reproj_errors_;

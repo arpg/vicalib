@@ -6,12 +6,12 @@
 #include <functional>
 #include <unistd.h>
 
-#include <calibu/cam/CameraXml.h>
-#include <calibu/cam/CameraModelT.h>
+#include <calibu/cam/camera_xml.h>
+#include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
-#include <PbMsgs/Matrix.h>
+#include <HAL/Messages/Matrix.h>
 
 #include <vicalib/eigen-alignment.h>
 #include <vicalib/grid-definitions.h>
@@ -166,33 +166,62 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     int h = camera_->Height(i);
 
     if (type == "fov") {
-      calibu::CameraModelT<calibu::Fov> starting_cam(w, h);
-      starting_cam.Params() << 300, 300, w/2.0, h/2.0, 0.2;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_(calibu::FovCamera<double>::NumParams);
+      size_ << w, h;
+      params_ << 300, 300, w/2.0, h/2.0, 0.2;
+      std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::FovCamera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_w");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
     } else if (type == "poly2") {
-      calibu::CameraModelT<calibu::Poly2> starting_cam(w, h);
-      starting_cam.Params() << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_(calibu::Poly2Camera<double>::NumParams);
+      size_ << w, h;
+      params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
+      std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::Poly2Camera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
     } else if (type == "poly3" || type =="poly") {
-      calibu::CameraModelT<calibu::Poly3> starting_cam(w, h);
-      starting_cam.Params() << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_(calibu::Poly3Camera<double>::NumParams);
+      size_ << w, h;
+      params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
+      std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::Poly3Camera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
     } else if (type == "kb4") {
-      calibu::CameraModelT<calibu::ProjectionKannalaBrandt> starting_cam(w, h);
-      starting_cam.Params() << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+      size_ << w, h;
+      params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+      std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
     } else if (type == "linear") {
-      calibu::CameraModelT<calibu::Pinhole> starting_cam(w, h);
-      starting_cam.Params() << 300, 300, w/2.0, h/2.0;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_(calibu::LinearCamera<double>::NumParams);
+      size_ << w, h;
+      params_ << 300, 300, w/2.0, h/2.0;
+      std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::LinearCamera<double>(params_, size_));
+      starting_cam->SetType("calibu_fu_fv_u0_v0");
       input_cameras.emplace_back(starting_cam, Sophus::SE3d());
     }
-    input_cameras.back().camera.SetRDF(calibu::RdfRobotics.matrix());
+    input_cameras.back().camera->SetRDF(calibu::RdfRobotics.matrix());
   }
 
-  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  std::shared_ptr<hal::ImageArray> images = hal::ImageArray::Create();
   camera_->Capture(*images);
   for (size_t i = 0; i < images->Size() && i < input_cameras.size(); ++i) {
-    input_cameras[i].camera.SetSerialNumber(images->at(i)->SerialNumber());
+    input_cameras[i].camera->SetSerialNumber(images->at(i)->SerialNumber());
   }
 
   Vector6d biases(Vector6d::Zero());
@@ -272,7 +301,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
     for (size_t ii = 0; ii < vicalib_->GetCalibrator().NumCameras(); ++ii) {
        stats_->t_ck_vec[ii] = vicalib_->GetCalibrator().GetCamera(ii).T_ck;
        stats_->cam_intrinsics[ii] =
-               vicalib_->GetCalibrator().GetCamera(ii).camera.GenericParams();
+               vicalib_->GetCalibrator().GetCamera(ii).camera->GetParams();
     }
     update_stats_callback_(std::make_shared<CalibrationStats>(*stats_));
 
@@ -407,12 +436,12 @@ bool VicalibEngine::CameraLoop() {
   }
 #endif
 
-  std::shared_ptr<pb::ImageArray> images = pb::ImageArray::Create();
+  std::shared_ptr<hal::ImageArray> images = hal::ImageArray::Create();
   bool captured = camera_->Capture(*images);
   if (captured) {
     cv::Mat temp_mat;
     for (int ii = 0; ii < images->Size(); ++ii) {
-      std::shared_ptr<pb::Image> img = images->at(ii);
+      std::shared_ptr<hal::Image> img = images->at(ii);
       if (img->Mat().channels() == 3) {
         cv::cvtColor(img->Mat(), temp_mat, CV_BGR2GRAY);
       }
@@ -450,7 +479,7 @@ bool VicalibEngine::CameraLoop() {
   return captured;
 }
 
-void VicalibEngine::ImuHandler(const pb::ImuMsg& imu) {
+void VicalibEngine::ImuHandler(const hal::ImuMsg& imu) {
   CHECK(imu.has_accel());
   CHECK(imu.has_gyro());
 

@@ -197,9 +197,9 @@ ENDIF (EXISTS ${METIS_LIB})
 SET(BLAS_AND_LAPACK_FOUND TRUE)
 IF (${APPLE})
   # Mac OS X has LAPACK/BLAS bundled in a framework called
-  # "vecLib". Search for that instead of for the normal "lapack"
+  # "Accelerate". Search for that instead of for the normal "lapack"
   # library.
-  FIND_LIBRARY(LAPACK_LIB NAMES vecLib)
+  FIND_LIBRARY(LAPACK_LIB NAMES Accelerate)
 ELSE (${APPLE})
   FIND_LIBRARY(BLAS_LIB NAMES blas)
   IF (EXISTS ${BLAS_LIB})
