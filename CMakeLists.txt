@@ -89,7 +89,7 @@ list( APPEND LIB_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include"
                           ${SceneGraph_INCLUDE_DIRS})
 
 
-set(INC_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/include/vicalib)
+set(INC_PREFIX include/vicalib)
 set(VICALIB_HDRS
     ${INC_PREFIX}/boxcar-filter.h
     ${INC_PREFIX}/calibration-stats.h
@@ -142,7 +142,7 @@ install_package(
   VERSION ${VICALIB_VERSION}
   DESCRIPTION "Visual-inertial calibration routine."
   INSTALL_INCLUDE_DIR true
-  DESTINATION ${CMAKE_INSTALL_PREFIX}/include/vicalib
+  DESTINATION ${CMAKE_INSTALL_PREFIX}
   INCLUDE_DIRS ${EXPORT_VICALIB_INC}
   LINK_LIBS ${LINK_LIBS}
   )
