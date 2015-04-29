@@ -107,8 +107,7 @@ function(install_package)
               cmake_policy( SET CMP0026 OLD )
             endif()
             get_target_property( _target_library ${PACKAGE_LIB_NAME} LOCATION )
-            get_filename_component( _lib ${_target_library} NAME )
-            list( APPEND PACKAGE_LINK_LIBS ${CMAKE_INSTALL_PREFIX}/lib/${_lib} )
+            list( APPEND PACKAGE_LINK_LIBS ${PACKAGE_LIB_NAME} )
         endif()
 
 
