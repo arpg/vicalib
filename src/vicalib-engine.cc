@@ -83,7 +83,7 @@ DEFINE_string(output_pattern_file, "",
 DEFINE_double(grid_large_rad, 0.00423,
               "Radius of large dots (m) (necessary to save the pattern).");
 DEFINE_double(grid_small_rad, 0.00283,
-              "Radius of large dots (m) (necessary to save the pattern).");
+              "Radius of small dots (m) (necessary to save the pattern).");
 
 DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
               "Sigma of gyroscope measurements.");
@@ -357,6 +357,8 @@ void VicalibEngine::CreateGrid() {
     } catch(...) {
       if (FLAGS_grid_preset == "small")
         preset = GridPresetGWUSmall;
+      else if( FLAGS_grid_preset == "letter")
+        preset = GridPresetLetter;
       else if (FLAGS_grid_preset == "large")
         preset = GridPresetGoogleLarge;
       else if (FLAGS_grid_preset == "medium")
@@ -367,6 +369,12 @@ void VicalibEngine::CreateGrid() {
       case GridPresetGWUSmall:
         grid_ = GWUSmallGrid();
         grid_spacing_ = 0.254 / 18;  // meters
+        large_rad = 0.00423;
+        small_rad = 0.00283;
+        break;
+      case GridPresetLetter:
+        grid_ = LetterGrid();
+        grid_spacing_ = 0.03156; //meters
         large_rad = 0.00423;
         small_rad = 0.00283;
         break;
