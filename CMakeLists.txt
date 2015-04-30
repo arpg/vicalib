@@ -1,5 +1,5 @@
 cmake_minimum_required( VERSION 2.8 )
-project("VICALIB")
+project("vicalib")
 
 if(POLICY CMP0042)
     cmake_policy(SET CMP0042 NEW) # MACOSX_RPATH
@@ -65,7 +65,7 @@ list(APPEND LINK_LIBS
   ${Calibu_LIBRARIES}
   ${CERES_LIBRARIES}
   ${CVars_LIBRARIES}
-  ${GFLAGS_LIBRARIES}
+  ${GFlags_LIBRARIES}
   ${GLOG_LIBRARIES}
   ${Pangolin_LIBRARIES}
   ${OpenCV2_LIBRARIES}
@@ -77,40 +77,25 @@ list(APPEND PROJ_INCLUDE_DIRS
   ${Calibu_INCLUDE_DIRS}
   ${CVars_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
-  ${GFLAGS_INCLUDE_DIRS}
+  ${GFlags_INCLUDE_DIR}
   )
 
 
 # Basic includes / libraries
-list( APPEND LIB_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include"
-                         "${CMAKE_CURRENT_SOURCE_DIR}"
+list( APPEND LIB_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
                           ${EIGEN_INCLUDE_DIR}
                           ${Sophus_INCLUDE_DIR}
                           ${SceneGraph_INCLUDE_DIRS})
 
-
-set(INC_PREFIX include/vicalib)
-set(VICALIB_HDRS
-    ${INC_PREFIX}/boxcar-filter.h
-    ${INC_PREFIX}/calibration-stats.h
-    ${INC_PREFIX}/ceres-cost-functions.h
-    ${INC_PREFIX}/gl-line-strip.h
-    ${INC_PREFIX}/interpolation-buffer.h
-    ${INC_PREFIX}/local-param-se3.h
-    ${INC_PREFIX}/types.h
-    ${INC_PREFIX}/vicalib-task.h
-    ${INC_PREFIX}/vicalibrator-utils.h
-    ${INC_PREFIX}/vicalibrator.h
-    )
-
 set(SRC_PREFIX src)
 set(VICALIB_SRCS
     ${SRC_PREFIX}/vicalib-engine.cc
+    ${SRC_PREFIX}/main.cc
     ${SRC_PREFIX}/vicalib-task.cc
 )
 
 set(VICALIB_CONDITIONS
-    Calibu_FOUND
+  Calibu_FOUND
   Ceres_FOUND
   GFLAGS_FOUND
   GLOG_FOUND
@@ -128,24 +113,28 @@ include_directories( ${USER_INC}
     ${CMAKE_SOURCE_DIR}/include
     )
 
-add_library( vicalib ${VICALIB_HEADERS} ${VICALIB_SRCS} )
+add_executable( vicalib ${VICALIB_SRCS} )
 target_link_libraries( vicalib ${LINK_LIBS} )
 
-# Create the CANDLEConfig.cmake file for the build tree.
-set(EXPORT_VICALIB_INC
-  ${PROJ_INCLUDE_DIRS}
-  )
 
-install_package(
-  PKG_NAME VICALIB
-  LIB_NAME vicalib
-  VERSION ${VICALIB_VERSION}
-  DESCRIPTION "Visual-inertial calibration routine."
-  INSTALL_INCLUDE_DIR true
-  DESTINATION ${CMAKE_INSTALL_PREFIX}
-  INCLUDE_DIRS ${EXPORT_VICALIB_INC}
-  LINK_LIBS ${LINK_LIBS}
-  )
+
+install(TARGETS vicalib RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+
+# Create the CANDLEConfig.cmake file for the build tree.
+set(EXPORT_VICALIB_INC ${PROJ_INCLUDE_DIRS} )
+
+# we only install the application -- there are no libraries or headers here.
+# It's just an app.
+
+#install_package(
+#  PKG_NAME VICALIB
+#  LIB_NAME vicalib
+#  VERSION ${VICALIB_VERSION}
+#  DESCRIPTION "Visual-inertial calibration routine."
+#  DESTINATION ${CMAKE_INSTALL_PREFIX}
+#  INCLUDE_DIRS ${EXPORT_VICALIB_INC}
+#  LINK_LIBS ${LINK_LIBS}
+#  )
 
 # For the examples to find this and only this version of VICALIB
 set( VICALIB_DIR ${CMAKE_CURRENT_BINARY_DIR} )
@@ -153,16 +142,11 @@ set( VICALIB_INCLUDE_DIRS ${USER_INC} )
 set( VICALIB_LIBRARIES ${LINK_LIBS} vicalib )
 link_libraries( ${VICALIB_LIBRARIES} vicalib )
 
-option(BUILD_TESTS "Build tests." ON)
-if( BUILD_TESTS )
-  enable_testing()
-  add_subdirectory( testing )
-endif()
-
-option(BUILD_APPLICATIONS "Build applications." ON)
-if( BUILD_APPLICATIONS )
-  add_subdirectory( applications )
-endif()
+#option(BUILD_TESTS "Build tests." ON)
+#if( BUILD_TESTS )
+#  enable_testing()
+#  add_subdirectory( testing )
+#endif()
 
 ###########################
 include(${CMAKE_MODULE_PATH}/cmake_uninstall.cmake.in)
