@@ -365,6 +365,9 @@ void VicalibEngine::CreateGrid() {
         preset = GridPresetMedium;
     }
 
+    double margin;
+    double width;
+
     switch (preset) {
       case GridPresetGWUSmall:
         grid_ = GWUSmallGrid();
@@ -374,9 +377,11 @@ void VicalibEngine::CreateGrid() {
         break;
       case GridPresetLetter:
         grid_ = LetterGrid();
-        grid_spacing_ = 0.03156; //meters
-        large_rad = 0.00423;
-        small_rad = 0.00283;
+        margin = 0.10;
+        width = 8.5*0.0254-2*margin;
+        grid_spacing_ = width / (grid_.cols()+2);  // meters
+        large_rad = width/grid_.cols()*2;
+        small_rad = 0.8*large_rad;
         break;
       case GridPresetMedium:
         grid_ = MediumGrid();
