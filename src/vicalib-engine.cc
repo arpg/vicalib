@@ -345,6 +345,8 @@ void VicalibEngine::Run() {
 void VicalibEngine::CreateGrid() {
   double large_rad = FLAGS_grid_large_rad;
   double small_rad = FLAGS_grid_small_rad;
+  Eigen::Vector2d offset(0,0);
+  double paper_width;
   grid_spacing_ = FLAGS_grid_spacing;
 
   if (FLAGS_grid_preset.empty()) {
@@ -365,8 +367,6 @@ void VicalibEngine::CreateGrid() {
         preset = GridPresetMedium;
     }
 
-    double margin;
-    double width;
 
     switch (preset) {
       case GridPresetGWUSmall:
@@ -377,11 +377,11 @@ void VicalibEngine::CreateGrid() {
         break;
       case GridPresetLetter:
         grid_ = LetterGrid();
-        margin = 0.10;
-        width = 8.5*0.0254-2*margin;
-        grid_spacing_ = width / (grid_.cols()+2);  // meters
-        large_rad = width/grid_.cols()*2;
-        small_rad = 0.8*large_rad;
+        paper_width = 8.5*0.0254;
+        grid_spacing_ = paper_width / (grid_.cols()+6);  // meters
+        large_rad = grid_spacing_/3;
+        small_rad = 0.7*large_rad;
+//        offset = Eigen::Vector2d( grid_spacing_/4, grid_spacing_/4 );
         break;
       case GridPresetMedium:
         grid_ = MediumGrid();
@@ -414,7 +414,6 @@ void VicalibEngine::CreateGrid() {
         FLAGS_output_pattern_file[p+3] == 'S'));
     if (eps) {
       const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
-      const Eigen::Vector2d offset(0,0);
       calibu::TargetGridDot(grid_spacing_, grid_).
           SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
                   pts_per_unit);
