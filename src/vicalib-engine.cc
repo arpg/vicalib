@@ -6,6 +6,8 @@
 #include <functional>
 #include <unistd.h>
 
+#include <fstream>
+
 #include <calibu/cam/camera_xml.h>
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
@@ -34,6 +36,7 @@ DEFINE_bool(calibrate_imu, true,
 DEFINE_bool(calibrate_intrinsics, true,
             "Calibrate the camera intrinsics as well as the extrinsics.");
 DEFINE_string(device_serial, "-1", "Serial number of device.");
+DEFINE_bool(save_poses,false, "Save calibrated camera poses when done.");
 DEFINE_bool(exit_vicalib_on_finish, true,
             "Exit vicalib when the optimization finishes.");
 DEFINE_int32(frame_skip, 0, "Number of frames to skip between constraints.");
@@ -311,12 +314,21 @@ void VicalibEngine::CalibrateAndDrawLoop() {
           CalibrationStats::StatusSuccess : CalibrationStats::StatusFailure;
       vicalib_->Finish(FLAGS_output);
       WriteCalibration();
+
+      if( FLAGS_save_poses ){
+        std::ofstream file("poses.csv");
+        for( size_t ii = 0; ii < vicalib_->GetCalibrator().NumFrames(); ii++ ){
+          Sophus::SE3Group<double> t_wk =
+            vicalib_->GetCalibrator().GetFrame(ii)->t_wp_;
+          file << "here I am:" << t_wk.matrix() << std::endl;
+        }
+        file.close();
+      }
+
       finished = true;
       if (FLAGS_exit_vicalib_on_finish) {
         exit(0);
-      } else {
-        break;
-      }
+      } 
     }
     Draw(vicalib_);
 
@@ -352,21 +364,17 @@ void VicalibEngine::CreateGrid() {
   if (FLAGS_grid_preset.empty()) {
     grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-  } else {
+  } 
+  else {
     int preset = kNoGridPreset;
-    try {
-      preset = std::stoi(FLAGS_grid_preset);
-    } catch(...) {
-      if (FLAGS_grid_preset == "small")
-        preset = GridPresetGWUSmall;
-      else if( FLAGS_grid_preset == "letter")
-        preset = GridPresetLetter;
-      else if (FLAGS_grid_preset == "large")
-        preset = GridPresetGoogleLarge;
-      else if (FLAGS_grid_preset == "medium")
-        preset = GridPresetMedium;
-    }
-
+    if (FLAGS_grid_preset == "small")
+      preset = GridPresetGWUSmall;
+    else if( FLAGS_grid_preset == "letter")
+      preset = GridPresetLetter;
+    else if (FLAGS_grid_preset == "large")
+      preset = GridPresetGoogleLarge;
+    else if (FLAGS_grid_preset == "medium")
+      preset = GridPresetMedium;
 
     switch (preset) {
       case GridPresetGWUSmall:

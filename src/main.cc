@@ -5,12 +5,15 @@
 #include <glog/logging.h>
 #include <vicalib/vicalib-engine.h>
 
-#define USAGE \
+static const char* g_usage =
+"Examples: \n\n"
+" vicalib -grid_preset=letter -cam rectify:[file=cameras.xml]//deinterlace://uvc://\n"
+" vicalib -grid_preset=letter -cam file:///home/user/data/*.pgm\n";
 
 int main(int argc, char *argv[]) 
 {
   if( argc == 1 ){
-    google::SetUsageMessage("Vicalib options:");
+    google::SetUsageMessage(g_usage);
     google::ShowUsageWithFlags(argv[0]);
     return -1;
   }
