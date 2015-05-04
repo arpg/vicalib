@@ -24,6 +24,7 @@ enum GridPreset {
   GridPresetGWUSmall  = 0,  // 19x10 grid at GWU
   GridPresetGoogleLarge = 1,  // 25x36 from Google folks
   GridPresetMedium = 2,     // 18x25 grid at CU
+  GridPresetLetter = 3,     // 10x 14 grid for letter paper
 };
 
 enum StaticThresholdPreset {
