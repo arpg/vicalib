@@ -21,7 +21,6 @@
 #include <vicalib/vicalib-engine.h>
 #include <vicalib/vicalibrator.h>
 #include <vicalib/calibration-stats.h>
-#include "EulerPoses.h"
 
 static const int64_t kCalibrateAllPossibleFrames = -1;
 static const int kNoGridPreset = -1;
