@@ -339,7 +339,7 @@ struct FullImuCostFunction {
   const double weight;
 };
 
-template<typename ProjModel>
+template<typename CameraInt>
 struct ImuReprojectionCostFunctor {
   ImuReprojectionCostFunctor(const Eigen::Vector3d& pw,
                              const Eigen::Vector2d& pc)
@@ -365,8 +365,8 @@ struct ImuReprojectionCostFunctor {
     const Sophus::SE3Group<T> t_ck(R_ck, p_ck);
 
     const Eigen::Matrix<T, 3, 1> p_cv = (t_ck * (t_kw * p_w.cast<T>()));
-    const Eigen::Matrix<T, 2, 1> z = ProjModel::template Project<T>(p_cv,
-                                                                    cam_params);
+    Eigen::Matrix<T,2,1> z;
+    CameraInt::Project(p_cv.data(), cam_params, z.data());
     r = z - p_c.cast<T>();
 
     return true;

@@ -17,3 +17,5 @@ def_executable(vicalib_exec
   ${SceneGraph_LIBRARIES}
   ${Pangolin_LIBRARIES}
   )
+
+install(TARGETS vicalib_exec RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)

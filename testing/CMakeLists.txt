@@ -33,7 +33,7 @@ set(TEST_ARCHIVE "vi_sim_resources.tar.gz")
 set(TEST_ARCHIVE_URL "http://arpg-web.colorado.edu/~arpg/${TEST_ARCHIVE}")
 set(TEST_ARCHIVE_LOCAL "${CMAKE_BINARY_DIR}/testing/${TEST_ARCHIVE}")
 
-if (NOT EXISTS "${TEST_ARCHIVE_LOCAL}")
+if (NOT EXISTS "${TEST_ARCHIVE_LOCAL}" AND NOT EXISTS "${CMAKE_BINARY_DIR}/testing/imu/timestamp.txt")
     file(DOWNLOAD "${TEST_ARCHIVE_URL}" "${TEST_ARCHIVE_LOCAL}")
     message("Downloaded ${TEST_ARCHIVE_LOCAL} from ${TEST_ARCHIVE_URL}.")
 endif()
