@@ -1,7 +1,7 @@
 #include <vicalib/vicalib-task.h>
 
 #include <time.h>
-
+#include <random.h>
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
@@ -15,6 +15,7 @@
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 DECLARE_bool(has_initial_guess);  // Defined in vicalib-engine.cc.
 DECLARE_bool(output_conics);			// Defined in vicalib-engine.cc.
+DEFINE_bool(clip_good, false, "Output proto file of only good tracked images");
 DECLARE_string(imu);              // Defined in vicalib-engine.cc.
 DEFINE_bool(find_time_offset, true,
             "Optimize for the time offset between the IMU and images");
@@ -93,6 +94,7 @@ VicalibTask::VicalibTask(
     nstreams_(num_streams),
     width_(width),
     height_(height),
+    logger_(hal::Logger::GetInstance()),
     calib_frame_(-1),
     tracking_good_(num_streams, false),
     t_cw_(num_streams),
@@ -118,6 +120,10 @@ VicalibTask::VicalibTask(
     conic_finder_[i].Params().conic_min_area = 4.0;
     conic_finder_[i].Params().conic_min_density = 0.6;
     conic_finder_[i].Params().conic_min_aspect = 0.2;
+  }
+
+  if (FLAGS_clip_good) {
+    logger_.LogToFile("", "good_tracking");
   }
   calibrator_.FixCameraIntrinsics(fix_intrinsics);
   input_imu_biases_ = calibrator_.GetBiases();
@@ -241,11 +247,16 @@ int VicalibTask::AddFrame(double frame_time) {
 void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
+  hal::Msg msg;
+  msg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
-    if (!valid_frames[ii]) {
+    if (!valid_frames[ii]) {      
       LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
+      if (ii == 0){
+        good_frame_.push_back(false);
+      }
       continue;
     }
 
@@ -268,6 +279,26 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       LOG(WARNING) << "Tracking bad for " << ii;
       continue;
     }
+
+    if (FLAGS_clip_good && tracking_good_[ii] && (ii == 0)) {
+      good_frame_.push_back(true);
+      hal::ImageMsg* img_message = msg.mutable_camera()->add_image();
+      img_message->set_height(img->Height());
+      img_message->set_width(img->Width());
+      cv::Mat image(img->Height(), img->Width(), CV_8UC1);
+      memcpy(img->Mat().data, image.data, img->Height()*img->Width());
+      img_message->set_data(image.data, img->Height()*img->Width());
+      img_message->set_format( hal::PB_LUMINANCE );
+      img_message->set_type( hal::PB_UNSIGNED_BYTE );
+      if (ii == n - 1) {
+        logger_.LogMessage(msg);
+      }
+    }
+
+
+    // Print out the binary pattern of the grid in which we're interested.
+    // std::ofstream("target.csv", std::ios_base::trunc) <<
+    //   target_[ii].GetBinaryPattern(0) << std::endl;
 
     // Generate map and point structures
     for (size_t i = 0; i < conics.size(); ++i) {
@@ -335,6 +366,50 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     }
   }
 }
+
+inline Eigen::Matrix<double, 6, 1> _T2Cart(const Eigen::Matrix4d& T) {
+  Eigen::Matrix<double, 6, 1> Cart;
+  Eigen::Matrix<double, 3, 3> R = T.block<3, 3>(0, 0);
+  Eigen::Vector3d rpq;
+  // roll
+  rpq[0] = atan2(R(2, 1), R(2, 2));
+
+  // pitch
+  double det = -R(2, 0) * R(2, 0) + 1.0;
+  if (det <= 0) {
+    if (R(2, 0) > 0) {
+      rpq[1] = -M_PI / 2.0;
+    } else {
+      rpq[1] = M_PI / 2.0;
+    }
+  } else {
+    rpq[1] = -asin(R(2, 0));
+  }
+
+  // yaw
+  rpq[2] = atan2(R(1, 0), R(0, 0));
+
+  Cart[0] = T(0, 3);
+  Cart[1] = T(1, 3);
+  Cart[2] = T(2, 3);
+  Cart[3] = rpq[0];
+  Cart[4] = rpq[1];
+  Cart[5] = rpq[2];
+
+  return Cart;
+}
+
+
+//void VicalibTask::WritePoses()
+//{
+//  FILE* f = fopen("poses.txt", "w");
+//  for (int ii = 0; ii < t_cw_.size(); ii++) {
+//    Eigen::Matrix<double, 6, 1> pose;
+//    pose = _T2Cart(t_cw_[ii].inverse().matrix());
+//    fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n", pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));
+//  }
+//  fclose(f);
+//}
 
 #ifdef HAVE_PANGOLIN
 

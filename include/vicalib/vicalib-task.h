@@ -29,6 +29,7 @@
 #include <calibu/image/ImageProcessing.h>
 #include <calibu/target/TargetGridDot.h>
 #include <HAL/Messages/ImageArray.h>
+#include <HAL/Messages/Logger.h>
 #include <gflags/gflags.h>
 #include <sophus/se3.hpp>
 
@@ -68,11 +69,13 @@ class VicalibTask {
   std::vector<bool> AddSuperFrame(const std::shared_ptr<hal::ImageArray>& imgs);
 
   void AddIMU(const hal::ImuMsg& imu);
+  std::vector<bool> GetGoodFrames( void ) { return good_frame_; }
 
   void Start(bool has_initial_guess);
   bool IsRunning();
   void Finish(const std::string& output_filename);
   void Draw();
+  void WritePoses();
   ViCalibrator& GetCalibrator() { return calibrator_; }
 
   double GetMeanSquaredError() {
@@ -108,8 +111,10 @@ class VicalibTask {
   size_t nstreams_;
   std::vector<size_t> width_;
   std::vector<size_t> height_;
+  hal::Logger& logger_;
   int calib_frame_;
   std::vector<bool> tracking_good_;
+  std::vector<bool> good_frame_;
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
