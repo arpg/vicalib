@@ -94,7 +94,7 @@ VicalibTask::VicalibTask(
     nstreams_(num_streams),
     width_(width),
     height_(height),
-    logger_(pb::Logger::GetInstance()),
+    logger_(hal::Logger::GetInstance()),
     calib_frame_(-1),
     tracking_good_(num_streams, false),
     t_cw_(num_streams),
@@ -247,8 +247,8 @@ int VicalibTask::AddFrame(double frame_time) {
 void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
-  pb::Msg pbMsg;
-  pbMsg.Clear();
+  hal::Msg msg;
+  msg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   for (size_t ii = 0; ii < n; ++ii) {
     if (!valid_frames[ii]) {      
@@ -282,16 +282,16 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
 
     if (FLAGS_clip_good && tracking_good_[ii] && (ii == 0)) {
       good_frame_.push_back(true);
-      pb::ImageMsg* img_message = pbMsg.mutable_camera()->add_image();
+      hal::ImageMsg* img_message = msg.mutable_camera()->add_image();
       img_message->set_height(img->Height());
       img_message->set_width(img->Width());
       cv::Mat image(img->Height(), img->Width(), CV_8UC1);
       memcpy(img->Mat().data, image.data, img->Height()*img->Width());
       img_message->set_data(image.data, img->Height()*img->Width());
-      img_message->set_format( pb::PB_LUMINANCE );
-      img_message->set_type( pb::PB_UNSIGNED_BYTE );
+      img_message->set_format( hal::PB_LUMINANCE );
+      img_message->set_type( hal::PB_UNSIGNED_BYTE );
       if (ii == n - 1) {
-        logger_.LogMessage(pbMsg);
+        logger_.LogMessage(msg);
       }
     }
 
