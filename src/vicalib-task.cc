@@ -1,6 +1,3 @@
-// Copyright (c) George Washington University, all rights reserved.  See the
-// accompanying LICENSE file for more information.
-
 #include <vicalib/vicalib-task.h>
 
 #include <time.h>
@@ -148,7 +145,8 @@ VicalibTask::VicalibTask(
 
 VicalibTask::~VicalibTask() { }
 
-void VicalibTask::SetupGUI() {
+void VicalibTask::SetupGUI() 
+{
 #ifdef HAVE_PANGOLIN
   LOG(INFO) << "Setting up GUI for " << NumStreams() << " streams.";
   // Setup GUI

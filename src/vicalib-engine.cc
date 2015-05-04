@@ -6,6 +6,8 @@
 #include <functional>
 #include <unistd.h>
 
+#include <fstream>
+
 #include <calibu/cam/camera_xml.h>
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
@@ -34,6 +36,7 @@ DEFINE_bool(calibrate_imu, true,
 DEFINE_bool(calibrate_intrinsics, true,
             "Calibrate the camera intrinsics as well as the extrinsics.");
 DEFINE_string(device_serial, "-1", "Serial number of device.");
+DEFINE_bool(save_poses,false, "Save calibrated camera poses when done.");
 DEFINE_bool(exit_vicalib_on_finish, true,
             "Exit vicalib when the optimization finishes.");
 DEFINE_int32(frame_skip, 0, "Number of frames to skip between constraints.");
@@ -76,14 +79,18 @@ DEFINE_bool(use_static_threshold_preset, false,
 DEFINE_string(cam, "", "Camera URI");
 DEFINE_string(imu, "", "IMU URI (if available)");
 DEFINE_string(models, "",
-              "Comma-separated list of camera models to calibrate. "
+              "Comma-separated list of camera model types to calibrate. "
+              "Must be in channel order.");
+DEFINE_string(model_files, "",
+              "Comma-separated list of camera model files pre-load. "
+              "If specified this supercedes the 'models' flag."
               "Must be in channel order.");
 DEFINE_string(output_pattern_file, "",
               "Output EPS or SVG file to save the calibration pattern.");
 DEFINE_double(grid_large_rad, 0.00423,
               "Radius of large dots (m) (necessary to save the pattern).");
 DEFINE_double(grid_small_rad, 0.00283,
-              "Radius of large dots (m) (necessary to save the pattern).");
+              "Radius of small dots (m) (necessary to save the pattern).");
 
 DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
               "Sigma of gyroscope measurements.");
@@ -146,76 +153,99 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                  " height: " << camera_->Height(i) << std::endl;
   }
 
-  std::vector<std::string> model_strings;
-  std::stringstream ss(FLAGS_models);
-  std::string item;
-  while (std::getline(ss, item, ',')) {
-    model_strings.push_back(item);
+  std::vector<std::string> model_files;
+  {
+    std::stringstream ss(FLAGS_model_files);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      model_files.push_back(item);
+    }
   }
 
-  if (model_strings.size() < camera_->NumChannels()) {
-    LOG(INFO) << "No model declared for all the camera channels, "
-                 "assuming poly3";
+  std::vector<std::string> model_strings;
+  {
+    std::stringstream ss(FLAGS_models);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      model_strings.push_back(item);
+    }
+  }
+
+  if( model_files.empty() && model_strings.size() < camera_->NumChannels()) {
+    LOG(INFO) << "Only " << model_strings.size() <<
+      " models declared using 'model_strings'.  Need one for all the "
+      <<  camera_->NumChannels() << " channels; assuming poly3";
     model_strings.resize(camera_->NumChannels(), "poly3");
   }
 
+  // use model xml files, if provided
   aligned_vector<CameraAndPose> input_cameras;
-  for (size_t i = 0; i < model_strings.size(); ++i) {
-    const std::string& type = model_strings[i];
-    int w = camera_->Width(i);
-    int h = camera_->Height(i);
-
-    if (type == "fov") {
-      Eigen::Vector2i size_;
-      Eigen::VectorXd params_(calibu::FovCamera<double>::NumParams);
-      size_ << w, h;
-      params_ << 300, 300, w/2.0, h/2.0, 0.2;
-      std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::FovCamera<double>(params_, size_));
-      starting_cam->SetType("calibu_fu_fv_u0_v0_w");
-      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
-
-    } else if (type == "poly2") {
-      Eigen::Vector2i size_;
-      Eigen::VectorXd params_(calibu::Poly2Camera<double>::NumParams);
-      size_ << w, h;
-      params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
-      std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::Poly2Camera<double>(params_, size_));
-      starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2");
-      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
-
-    } else if (type == "poly3" || type =="poly") {
-      Eigen::Vector2i size_;
-      Eigen::VectorXd params_(calibu::Poly3Camera<double>::NumParams);
-      size_ << w, h;
-      params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
-      std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::Poly3Camera<double>(params_, size_));
-      starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
-      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
-
-    } else if (type == "kb4") {
-      Eigen::Vector2i size_;
-      Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
-      size_ << w, h;
-      params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
-      std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
-      starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
-      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
-
-    } else if (type == "linear") {
-      Eigen::Vector2i size_;
-      Eigen::VectorXd params_(calibu::LinearCamera<double>::NumParams);
-      size_ << w, h;
-      params_ << 300, 300, w/2.0, h/2.0;
-      std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::LinearCamera<double>(params_, size_));
-      starting_cam->SetType("calibu_fu_fv_u0_v0");
-      input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+  if( !model_files.empty() ){
+    for (size_t i = 0; i < model_files.size(); ++i) {
+      std::shared_ptr<calibu::Rigd> rig = calibu::ReadXmlRig(model_files[i]);
+      input_cameras.emplace_back( rig->cameras_[0], Sophus::SE3d());
+      LOG(INFO) << "Initalizing with user provided model file: " 
+        <<  model_files[i] << "\n" ;
     }
-    input_cameras.back().camera->SetRDF(calibu::RdfRobotics.matrix());
+  }
+  else{ 
+    for (size_t i = 0; i < model_strings.size(); ++i) {
+      const std::string& type = model_strings[i];
+      int w = camera_->Width(i);
+      int h = camera_->Height(i);
+
+      if (type == "fov") {
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::FovCamera<double>::NumParams);
+        size_ << w, h;
+        params_ << 300, 300, w/2.0, h/2.0, 0.2;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::FovCamera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_w");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
+      } else if (type == "poly2") {
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::Poly2Camera<double>::NumParams);
+        size_ << w, h;
+        params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::Poly2Camera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
+      } else if (type == "poly3" || type =="poly") {
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::Poly3Camera<double>::NumParams);
+        size_ << w, h;
+        params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::Poly3Camera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
+      } else if (type == "kb4") {
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+        size_ << w, h;
+        params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
+      } else if (type == "linear") {
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::LinearCamera<double>::NumParams);
+        size_ << w, h;
+        params_ << 300, 300, w/2.0, h/2.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::LinearCamera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+      }
+      input_cameras.back().camera->SetRDF(calibu::RdfRobotics.matrix());
+    }
   }
 
   std::shared_ptr<hal::ImageArray> images = hal::ImageArray::Create();
@@ -311,12 +341,26 @@ void VicalibEngine::CalibrateAndDrawLoop() {
           CalibrationStats::StatusSuccess : CalibrationStats::StatusFailure;
       vicalib_->Finish(FLAGS_output);
       WriteCalibration();
+
+      if( FLAGS_save_poses ){
+        std::ofstream file("poses.csv");
+        file << "\% Pose file generated with vicalib.\n"
+             << "\% Each line is the 12 elements from the top 3 rows of a 4x4"
+             << "transformation matrix, printed row major.\n";
+
+        for( size_t ii = 0; ii < vicalib_->GetCalibrator().NumFrames(); ii++ ){
+          Eigen::Matrix4d t_wk =
+            vicalib_->GetCalibrator().GetFrame(ii)->t_wp_.matrix();
+          file << t_wk.row(0) << "     " << t_wk.row(1) 
+            << "     " << t_wk.row(2) << std::endl;
+        }
+        file.close();
+      }
+
       finished = true;
       if (FLAGS_exit_vicalib_on_finish) {
         exit(0);
-      } else {
-        break;
-      }
+      } 
     }
     Draw(vicalib_);
 
@@ -345,23 +389,24 @@ void VicalibEngine::Run() {
 void VicalibEngine::CreateGrid() {
   double large_rad = FLAGS_grid_large_rad;
   double small_rad = FLAGS_grid_small_rad;
+  Eigen::Vector2d offset(0,0);
+  double paper_width;
   grid_spacing_ = FLAGS_grid_spacing;
 
   if (FLAGS_grid_preset.empty()) {
     grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-  } else {
+  } 
+  else {
     int preset = kNoGridPreset;
-    try {
-      preset = std::stoi(FLAGS_grid_preset);
-    } catch(...) {
-      if (FLAGS_grid_preset == "small")
-        preset = GridPresetGWUSmall;
-      else if (FLAGS_grid_preset == "large")
-        preset = GridPresetGoogleLarge;
-      else if (FLAGS_grid_preset == "medium")
-        preset = GridPresetMedium;
-    }
+    if (FLAGS_grid_preset == "small")
+      preset = GridPresetGWUSmall;
+    else if( FLAGS_grid_preset == "letter")
+      preset = GridPresetLetter;
+    else if (FLAGS_grid_preset == "large")
+      preset = GridPresetGoogleLarge;
+    else if (FLAGS_grid_preset == "medium")
+      preset = GridPresetMedium;
 
     switch (preset) {
       case GridPresetGWUSmall:
@@ -369,6 +414,14 @@ void VicalibEngine::CreateGrid() {
         grid_spacing_ = 0.254 / 18;  // meters
         large_rad = 0.00423;
         small_rad = 0.00283;
+        break;
+      case GridPresetLetter:
+        grid_ = LetterGrid();
+        paper_width = 8.5*0.0254;
+        grid_spacing_ = paper_width / (grid_.cols()+6);  // meters
+        large_rad = grid_spacing_/3;
+        small_rad = 0.7*large_rad;
+//        offset = Eigen::Vector2d( grid_spacing_/4, grid_spacing_/4 );
         break;
       case GridPresetMedium:
         grid_ = MediumGrid();
@@ -401,7 +454,6 @@ void VicalibEngine::CreateGrid() {
         FLAGS_output_pattern_file[p+3] == 'S'));
     if (eps) {
       const double pts_per_unit = 72. / 2.54 * 100.; // points per meter
-      const Eigen::Vector2d offset(0,0);
       calibu::TargetGridDot(grid_spacing_, grid_).
           SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
                   pts_per_unit);
