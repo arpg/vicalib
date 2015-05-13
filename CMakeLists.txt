@@ -121,41 +121,12 @@ include_directories( ${USER_INC}
 add_executable( vicalib ${VICALIB_SRCS} )
 target_link_libraries( vicalib ${LINK_LIBS} )
 
-
+add_executable( vicalib src/tracker.cc )
+target_link_libraries( vicalib ${LINK_LIBS} )
 
 install(TARGETS vicalib RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+install(TARGETS tracker RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 
-# Create the CANDLEConfig.cmake file for the build tree.
-set(EXPORT_VICALIB_INC ${PROJ_INCLUDE_DIRS} )
-
-# we only install the application -- there are no libraries or headers here.
-# It's just an app.
-
-#install_package(
-#  PKG_NAME VICALIB
-#  LIB_NAME vicalib
-#  VERSION ${VICALIB_VERSION}
-#  DESCRIPTION "Visual-inertial calibration routine."
-#  DESTINATION ${CMAKE_INSTALL_PREFIX}
-#  INCLUDE_DIRS ${EXPORT_VICALIB_INC}
-#  LINK_LIBS ${LINK_LIBS}
-#  )
-
-# For the examples to find this and only this version of VICALIB
-set( VICALIB_DIR ${CMAKE_CURRENT_BINARY_DIR} )
-set( VICALIB_INCLUDE_DIRS ${USER_INC} )
-set( VICALIB_LIBRARIES ${LINK_LIBS} vicalib )
-link_libraries( ${VICALIB_LIBRARIES} vicalib )
-
-#option(BUILD_TESTS "Build tests." ON)
-#if( BUILD_TESTS )
-#  enable_testing()
-#  add_subdirectory( testing )
-#endif()
-
-###########################
 include(${CMAKE_MODULE_PATH}/cmake_uninstall.cmake.in)
-
 add_custom_target(uninstall
      COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-###########################
