@@ -121,8 +121,8 @@ include_directories( ${USER_INC}
 add_executable( vicalib ${VICALIB_SRCS} )
 target_link_libraries( vicalib ${LINK_LIBS} )
 
-add_executable( vicalib src/tracker.cc )
-target_link_libraries( vicalib ${LINK_LIBS} )
+add_executable( tracker src/tracker.cc )
+target_link_libraries( tracker ${LINK_LIBS} )
 
 install(TARGETS vicalib RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
 install(TARGETS tracker RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)

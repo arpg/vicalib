@@ -20,13 +20,6 @@ DECLARE_bool(use_static_threshold_preset);  // Defined in vicalib-engine.cc.
 
 namespace visual_inertial_calibration {
 
-enum GridPreset {
-  GridPresetGWUSmall  = 0,  // 19x10 grid at GWU
-  GridPresetGoogleLarge = 1,  // 25x36 from Google folks
-  GridPresetMedium = 2,     // 18x25 grid at CU
-  GridPresetLetter = 3,     // 10x 14 grid for letter paper
-};
-
 enum StaticThresholdPreset {
   StaticThresholdManual = 0,  // relaxed threshold (handheld calibration)
   StaticThresholdStrict = 1,  // tight threshold (automatic calibration)
