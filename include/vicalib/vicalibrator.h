@@ -255,7 +255,6 @@ class ViCalibrator : public ceres::IterationCallback {
 
   // Start optimization thread to modify intrinsic / extrinsic parameters.
   void Start() {
-    pthread_mutex_init(&update_mutex_, NULL);
     pthread_attr_init(&thread_attr_);
     pthread_attr_setdetachstate(&thread_attr_, PTHREAD_CREATE_JOINABLE);
 
@@ -960,7 +959,7 @@ class ViCalibrator : public ceres::IterationCallback {
     is_running_ = false;
   }
 
-  pthread_mutex_t update_mutex_;
+  pthread_mutex_t update_mutex_ = PTHREAD_MUTEX_INITIALIZER ;
   pthread_attr_t thread_attr_;
   pthread_t thread_;
   bool should_run_;
