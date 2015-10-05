@@ -1,2 +1,16 @@
 *~
 build/
+
+#CMake-generated files
+CMakeFiles/
+doc-pak/
+cmake_install.cmake
+cmake_uninstall.cmake
+.cproject
+.project
+vicalib
+install_manifest.txt
+description-pak
+.settings/
+CMakeCache.txt
+Makefile
