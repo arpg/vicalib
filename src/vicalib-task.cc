@@ -80,7 +80,6 @@ VicalibTask::VicalibTask(
         const std::vector<size_t>& height,
         double grid_spacing,
         const Eigen::MatrixXi& grid,
-        const std::shared_ptr<calibu::TargetGridDot>& target,
         bool fix_intrinsics,
         const std::vector<CameraAndPose,
         Eigen::aligned_allocator<CameraAndPose> >& input_cameras,
@@ -91,7 +90,6 @@ VicalibTask::VicalibTask(
     negative_conic_finder_(num_streams),
     target_(num_streams,
             calibu::TargetGridDot(grid_spacing, grid)),
-    target_(num_streams, target),
     grid_size_(grid.cols(), grid.ros()),
     grid_spacing_(grid_spacing),
     calib_cams_(num_streams, 0),
@@ -719,6 +717,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   int num_new_frames = 0;
   std::vector<bool> valid_frames;
   valid_frames.resize(images_->Size());
+
 
   DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {

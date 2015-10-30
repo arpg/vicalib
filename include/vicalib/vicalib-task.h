@@ -60,7 +60,6 @@ class VicalibTask {
               const std::vector<size_t>& height,
               double gspacing,
               const Eigen::MatrixXi& grid,
-              const std::shared_ptr<calibu::TargetGridDot>& target,
               bool fix_intrinsics,
               const aligned_vector<CameraAndPose>& input_cameras,
               const std::vector<double>& max_reproj_errors);
@@ -116,7 +115,7 @@ class VicalibTask {
  private:
   std::vector<calibu::ImageProcessing> image_processing_;
   aligned_vector<calibu::ConicFinder> conic_finder_;
-  aligned_vector<std::shared_ptr<calibu::TargetGridDot>> target_;
+  aligned_vector<calibu::TargetGridDot> target_;
   std::vector<calibu::ImageProcessing> negative_image_processing_;
   aligned_vector<calibu::ConicFinder> negative_conic_finder_;
   Eigen::Vector2i grid_size_;

@@ -278,7 +278,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                                  FLAGS_max_reprojection_error);
   std::shared_ptr<VicalibTask> task(
       new VicalibTask(camera_->NumChannels(), widths, heights,
-                      grid_spacing_, target_, grid_,
+                      grid_spacing_, grid_,
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
@@ -450,7 +450,6 @@ void VicalibEngine::CreateGrid() {
   Eigen::Vector2d offset(0,0);
   grid_spacing_ = FLAGS_grid_spacing;
 
-  Eigen::MatrixXi grid;
   int vicon_layout = kNoGridPreset;
   if (FLAGS_grid_preset.empty()) {
     grid_ = calibu::MakePattern(
