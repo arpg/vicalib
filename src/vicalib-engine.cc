@@ -11,19 +11,19 @@
 #include <calibu/cam/camera_xml.h>
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
+#include <calibu/target/GridDefinitions.h>
+
 #include <HAL/Camera/CameraDevice.h>
 #include <glog/logging.h>
 #include <HAL/Messages/Matrix.h>
 
 #include <vicalib/eigen-alignment.h>
-#include <vicalib/grid-definitions.h>
 #include <vicalib/vicalib-task.h>
 #include <vicalib/vicalib-engine.h>
 #include <vicalib/vicalibrator.h>
 #include <vicalib/calibration-stats.h>
 
 static const int64_t kCalibrateAllPossibleFrames = -1;
-static const int kNoGridPreset = -1;
 
 #ifdef BUILD_GUI
 DEFINE_bool(paused, false, "Start video paused");
@@ -51,9 +51,7 @@ DEFINE_bool(output_conics, false,
             "Output center of found conics to the file ./conics.csv.");
 DEFINE_string(grid_preset, "",
              "Which grid preset to use. "
-             "Must be a visual_inertial_calibration::GridPreset or an alias. "
-             "0 or \"small\" for small GWU grid, 1 or \"large\" "
-             "for large Google grid.");
+             "Use \"small\" for small GWU grid, \"large\" for large Google grid, or \"letter\" for the CU grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -439,55 +437,14 @@ void VicalibEngine::CreateGrid() {
   double large_rad = FLAGS_grid_large_rad;
   double small_rad = FLAGS_grid_small_rad;
   Eigen::Vector2d offset(0,0);
-  double paper_width;
   grid_spacing_ = FLAGS_grid_spacing;
 
   if (FLAGS_grid_preset.empty()) {
     grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
-  } 
+  }
   else {
-    int preset = kNoGridPreset;
-    if (FLAGS_grid_preset == "small")
-      preset = GridPresetGWUSmall;
-    else if( FLAGS_grid_preset == "letter")
-      preset = GridPresetLetter;
-    else if (FLAGS_grid_preset == "large")
-      preset = GridPresetGoogleLarge;
-    else if (FLAGS_grid_preset == "medium")
-      preset = GridPresetMedium;
-
-    switch (preset) {
-      case GridPresetGWUSmall:
-        grid_ = GWUSmallGrid();
-        grid_spacing_ = 0.254 / 18;  // meters
-        large_rad = 0.00423;
-        small_rad = 0.00283;
-        break;
-      case GridPresetLetter:
-        grid_ = LetterGrid();
-        paper_width = 8.5*0.0254;
-        grid_spacing_ = paper_width / (grid_.cols()+6);  // meters
-        large_rad = grid_spacing_/3;
-        small_rad = 0.7*large_rad;
-//        offset = Eigen::Vector2d( grid_spacing_/4, grid_spacing_/4 );
-        break;
-      case GridPresetMedium:
-        grid_ = MediumGrid();
-        grid_spacing_ = 0.03156;  // meters
-        large_rad = 0.00889;
-        small_rad = 0.00635;
-        break;
-      case GridPresetGoogleLarge:
-        grid_ = GoogleLargeGrid();
-        grid_spacing_ = 0.03156;  // meters
-        large_rad = 0.00889;
-        small_rad = 0.00635;
-        break;
-      default:
-        LOG(FATAL) << "Unknown grid preset " << FLAGS_grid_preset;
-        break;
-    }
+    calibu::LoadGridFromPreset(FLAGS_grid_preset,grid_,grid_spacing_,large_rad,small_rad);
   }
 
   if (!FLAGS_output_pattern_file.empty()) {
