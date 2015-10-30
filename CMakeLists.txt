@@ -47,7 +47,12 @@ find_package( CVars REQUIRED )
 find_package( GFlags REQUIRED )
 find_package( GLog REQUIRED )
 find_package( HAL REQUIRED )
-find_package( OpenCV2 REQUIRED )
+find_package( OpenCV REQUIRED COMPONENTS core)
+if(OpenCV_VERSION_MAJOR EQUAL 2)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
+elseif(OpenCV_VERSION_MAJOR EQUAL 3)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc videoio)
+endif()
 find_package( Pangolin REQUIRED )
 
 # Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
@@ -68,7 +73,7 @@ list(APPEND LINK_LIBS
   ${GFlags_LIBRARIES}
   ${GLOG_LIBRARIES}
   ${Pangolin_LIBRARIES}
-  ${OpenCV2_LIBRARIES}
+  ${OpenCV_LIBS}
   dl)
 
 list(APPEND PROJ_INCLUDE_DIRS
@@ -100,7 +105,7 @@ set(VICALIB_CONDITIONS
   GFLAGS_FOUND
   GLOG_FOUND
   HAL_FOUND
-  OpenCV2_FOUND
+  OpenCV_FOUND
   Pangolin_FOUND
   )
 
