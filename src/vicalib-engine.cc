@@ -278,7 +278,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
                                  FLAGS_max_reprojection_error);
   std::shared_ptr<VicalibTask> task(
       new VicalibTask(camera_->NumChannels(), widths, heights,
-                      grid_spacing_, target_, //grid_,
+                      grid_spacing_, target_, grid_,
                       !FLAGS_calibrate_intrinsics,
                       input_cameras, max_errors));
 
@@ -453,7 +453,7 @@ void VicalibEngine::CreateGrid() {
   Eigen::MatrixXi grid;
   int vicon_layout = kNoGridPreset;
   if (FLAGS_grid_preset.empty()) {
-    grid = calibu::MakePattern(
+    grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
   }
   else {
@@ -483,7 +483,8 @@ void VicalibEngine::CreateGrid() {
           SaveEPS(FLAGS_output_pattern_file, offset, small_rad, large_rad,
                   pts_per_unit);
     } else {
-      target_->SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
+      calibu::TargetGridDot(grid_spacing_, grid_).
+          SaveSVG(FLAGS_output_pattern_file, small_rad, large_rad);
     }
     LOG(INFO) << "File " << FLAGS_output_pattern_file << " saved";
     if (!eps) {

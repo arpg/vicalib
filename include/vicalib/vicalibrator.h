@@ -625,6 +625,7 @@ class ViCalibrator : public ceres::IterationCallback {
 
           imu_costs_.push_back(std::unique_ptr<ImuCostFunctionAndParams>(cost));
         }
+        ++num_imu_residuals_;
       }
     }
 

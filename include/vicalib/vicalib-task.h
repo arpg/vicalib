@@ -59,7 +59,7 @@ class VicalibTask {
               const std::vector<size_t>& width,
               const std::vector<size_t>& height,
               double gspacing,
-              //const Eigen::MatrixXi& grid,
+              const Eigen::MatrixXi& grid,
               const std::shared_ptr<calibu::TargetGridDot>& target,
               bool fix_intrinsics,
               const aligned_vector<CameraAndPose>& input_cameras,
@@ -116,9 +116,9 @@ class VicalibTask {
  private:
   std::vector<calibu::ImageProcessing> image_processing_;
   aligned_vector<calibu::ConicFinder> conic_finder_;
+  aligned_vector<std::shared_ptr<calibu::TargetGridDot>> target_;
   std::vector<calibu::ImageProcessing> negative_image_processing_;
   aligned_vector<calibu::ConicFinder> negative_conic_finder_;
-  aligned_vector<std::shared_ptr<calibu::TargetGridDot>> target_;
   Eigen::Vector2i grid_size_;
   double frame_timestamp_offset_;
   double grid_spacing_;
@@ -132,13 +132,13 @@ class VicalibTask {
   hal::Logger& logger_;
   int calib_frame_;
   std::vector<bool> tracking_good_;
+  std::vector<bool> good_frame_;
   std::vector<bool> vicon_tracking_good_;
   aligned_vector<Sophus::SE3d> t_cw_;
   int num_frames_;
   ViCalibrator calibrator_;
   ViCalibrator vicon_calibrator_;
   std::shared_ptr<hal::ImageArray> images_;
-  std::vector<bool> good_frame_;
   aligned_vector<CameraAndPose> input_cameras_;
   Vector6d input_imu_biases_;
   std::vector<double> max_reproj_errors_;

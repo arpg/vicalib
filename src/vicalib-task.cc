@@ -79,7 +79,7 @@ VicalibTask::VicalibTask(
         const std::vector<size_t>& width,
         const std::vector<size_t>& height,
         double grid_spacing,
-        //const Eigen::MatrixXi& grid,
+        const Eigen::MatrixXi& grid,
         const std::shared_ptr<calibu::TargetGridDot>& target,
         bool fix_intrinsics,
         const std::vector<CameraAndPose,
@@ -89,11 +89,10 @@ VicalibTask::VicalibTask(
     conic_finder_(num_streams),
     negative_image_processing_(),
     negative_conic_finder_(num_streams),
-    //target_(num_streams,
-    //        calibu::TargetGridDot(grid_spacing, grid)),
+    target_(num_streams,
+            calibu::TargetGridDot(grid_spacing, grid)),
     target_(num_streams, target),
-    grid_size_(target->GetBinaryPattern().cols(),
-               target->GetBinaryPattern().rows()),
+    grid_size_(grid.cols(), grid.ros()),
     grid_spacing_(grid_spacing),
     calib_cams_(num_streams, 0),
     frame_times_(num_streams, 0),
@@ -295,9 +294,9 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
         conic_finder_[ii].Conics();
     std::vector<int> ellipse_target__map;
 
-    tracking_good_[ii] = target_[ii]->FindTarget(image_processing_[ii],
-                                                 conics,
-                                                 ellipse_target__map);
+    tracking_good_[ii] = target_[ii].FindTarget(image_processing_[ii],
+                                                conics,
+                                                ellipse_target__map);
     if (!tracking_good_[ii]) {
       LOG(WARNING) << "Tracking bad for " << ii;
       continue;
@@ -344,7 +343,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
 
     // find camera pose given intrinsics
     PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
-                  target_[ii]->Circles3D(), ellipse_target__map, 0, 0,
+                  target_[ii].Circles3D(), ellipse_target__map, 0, 0,
                   &t_cw_[ii]);
 
     if (target_[ii]->HasViconMarkers()) {
@@ -395,7 +394,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
 
         for (size_t p = 0; p < ellipses[ii].size(); ++p) {
           const Eigen::Vector2d pc = ellipses[ii][p];
-          const Eigen::Vector2i pg = target_[ii]->Map()[p].pg;
+          const Eigen::Vector2i pg = target_[ii].Map()[p].pg;
 
           if (0 <= pg(0) && pg(0) < grid_size_(0) && 0 <= pg(1)
               && pg(1) < grid_size_(1)) {
@@ -494,15 +493,15 @@ void VicalibTask::Draw3d() {
   if (!v3d.IsShown()) return;
 
   v3d.ActivateScissorAndClear(stacks_);
-  calibu::glDrawTarget(*target_[0], Eigen::Vector2d(0, 0), 1.0, 0.8, 1.0);
+  calibu::glDrawTarget(target_[0], Eigen::Vector2d(0, 0), 1.0, 0.8, 1.0);
 
   if (options_->disp_barcode) {
     const std::vector<Eigen::Vector3d,
                       Eigen::aligned_allocator<Eigen::Vector3d> >& code_points =
-        target_[0]->Code3D();
+        target_[0].Code3D();
     for (const Eigen::Vector3d& xwp : code_points) {
       glColor3f(1.0, 0.0, 1.0);
-      pangolin::glDrawCircle(xwp.head<2>(), target_[0]->CircleRadius());
+      pangolin::glDrawCircle(xwp.head<2>(), target_[0].CircleRadius());
     }
   }
 
@@ -602,8 +601,8 @@ void VicalibTask::Draw2d() {
           negative_conic_finder_[c].Conics();
       if (options_->disp_lines) {
         for (std::list<calibu::LineGroup>::const_iterator it =
-                 target_[c]->LineGroups().begin();
-             it != target_[c]->LineGroups().end(); ++it) {
+                 target_[c].LineGroups().begin();
+             it != target_[c].LineGroups().end(); ++it) {
           glColor3f(0.5, 0.5, 0.5);
           glBegin(GL_LINE_STRIP);
           for (std::list<size_t>::const_iterator el = it->ops.begin();
@@ -619,7 +618,7 @@ void VicalibTask::Draw2d() {
         static const int kImageBoundaryRegion = 10;
         const std::vector<Eigen::Vector3d,
             Eigen::aligned_allocator<Eigen::Vector3d> >& code_points =
-                target_[c]->Code3D();
+                target_[c].Code3D();
         const CameraAndPose cap = calibrator_.GetCamera(c);
         const unsigned char* im = image_processing_[c].ImgThresh();
         unsigned char id = 0;
@@ -671,7 +670,7 @@ void VicalibTask::DrawCrosses(const std::vector<calibu::Conic,
 {
   for (size_t i = 0; i < conics.size(); ++i) {
     const Eigen::Vector2d pc = conics[i].center;
-    pangolin::glColorBin(target->Map()[index_offset + i].value, 2);
+    pangolin::glColorBin(target.Map()[index_offset + i].value, 2);
     pangolin::glDrawCross(pc, conics[i].bbox.Width() * 0.75);
   }
 }
@@ -685,7 +684,7 @@ void VicalibTask::DrawBoxes(const std::vector<calibu::Conic,
   for (size_t i = 0; i < conics.size(); ++i) {
     const Eigen::Vector2i grid_point =
         tracking_good ?
-        target->Map()[index_offset + i].pg : Eigen::Vector2i(0, 0);
+        target.Map()[index_offset + i].pg : Eigen::Vector2i(0, 0);
 
     if (0 <= grid_point[0] && grid_point[0] < grid_size_[0] &&
         0 <= grid_point[1] && grid_point[1] < grid_size_[1]) {

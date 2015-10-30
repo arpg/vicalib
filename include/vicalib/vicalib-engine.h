@@ -61,7 +61,7 @@ class VicalibEngine {
   std::unique_ptr<hal::Camera> camera_;
   std::unique_ptr<hal::IMU> imu_;
   BoxcarFilter<Eigen::Vector3d> gyro_filter_, accel_filter_;
-  //Eigen::MatrixXi grid_;
+  Eigen::MatrixXi grid_;
   std::shared_ptr<calibu::TargetGridDot> target_;
   double grid_spacing_;
 };
