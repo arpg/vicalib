@@ -1,16 +1,11 @@
-// Copyright (c) George Washington University, all rights reserved.  See the
-// accompanying LICENSE file for more information.
-
-#include <visual-inertial-calibration/vicalib-task.h>
+#include <vicalib/vicalib-task.h>
 
 #include <time.h>
-#include <chrono>
-#include <thread>
-
+#include <random>
 #include <CVars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
-#include <PbMsgs/Matrix.h>
+#include <HAL/Messages/Matrix.h>
 
 #ifdef HAVE_PANGOLIN
 #include <calibu/gl/Drawing.h>
@@ -19,6 +14,8 @@
 
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
 DECLARE_bool(has_initial_guess);  // Defined in vicalib-engine.cc.
+DECLARE_bool(output_conics);			// Defined in vicalib-engine.cc.
+DEFINE_bool(clip_good, false, "Output proto file of only good tracked images");
 DECLARE_string(imu);              // Defined in vicalib-engine.cc.
 DEFINE_bool(find_time_offset, true,
             "Optimize for the time offset between the IMU and images");
@@ -104,6 +101,7 @@ VicalibTask::VicalibTask(
     nstreams_(num_streams),
     width_(width),
     height_(height),
+    logger_(hal::Logger::GetInstance()),
     calib_frame_(-1),
     tracking_good_(num_streams, false),
     vicon_tracking_good_(num_streams, false),
@@ -113,6 +111,7 @@ VicalibTask::VicalibTask(
     vicon_calibrator_(),
     input_cameras_(input_cameras),
     max_reproj_errors_(max_reproj_errors),
+    image_time_offset(-1),
 
 #ifdef HAVE_PANGOLIN
     textures_(nstreams_),
@@ -142,6 +141,9 @@ VicalibTask::VicalibTask(
     negative_conic_finder_[i].Params().conic_min_aspect = 0.2;
   }
 
+  if (FLAGS_clip_good) {
+    logger_.LogToFile("", "good_tracking");
+  }
   calibrator_.FixCameraIntrinsics(fix_intrinsics);
   input_imu_biases_ = calibrator_.GetBiases();
 
@@ -153,11 +155,14 @@ VicalibTask::VicalibTask(
                                               input_cameras[ii].T_ck);
     } else {
       // Generic starting set of parameters.
-      calibu::CameraModelT<calibu::Fov> starting_cam(w_i, h_i);
-      starting_cam.Params() << 300, 300, w_i / 2.0, h_i / 2.0, 0.2;
+      Eigen::Vector2i size_;
+      Eigen::VectorXd params_;
+      size_ << w_i, h_i;
+      params_ << 300, 300, w_i / 2.0, h_i / 2.0, 0.2;
+      std::shared_ptr<calibu::FovCamera<double>>
+          starting_cam(new calibu::FovCamera<double>(params_, size_));
 
-      calib_cams_[ii] = calibrator_.AddCamera(calibu::CameraModel(starting_cam),
-                                              Sophus::SE3d());
+      calib_cams_[ii] = calibrator_.AddCamera( starting_cam, Sophus::SE3d());
     }
   }
   SetupGUI();
@@ -165,7 +170,8 @@ VicalibTask::VicalibTask(
 
 VicalibTask::~VicalibTask() { }
 
-void VicalibTask::SetupGUI() {
+void VicalibTask::SetupGUI() 
+{
 #ifdef HAVE_PANGOLIN
   LOG(INFO) << "Setting up GUI for " << NumStreams() << " streams.";
   // Setup GUI
@@ -260,19 +266,24 @@ int VicalibTask::AddFrame(double frame_time) {
 void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   size_t n = images_->Size();
 
+  hal::Msg msg;
+  msg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
   std::vector<aligned_vector<Eigen::Vector2d> > vicon_ellipses(n);
   std::vector<std::vector<int> > vicon_map(n);
   std::vector<Sophus::SE3d> t_cv(n);
   for (size_t ii = 0; ii < n; ++ii) {
-    if (!valid_frames[ii]) {
+    if (!valid_frames[ii]) {      
       LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
       vicon_tracking_good_[ii] = false;
+      if (ii == 0){
+        good_frame_.push_back(false);
+      }
       continue;
     }
 
-    std::shared_ptr<pb::Image> img = images_->at(ii);
+    std::shared_ptr<hal::Image> img = images_->at(ii);
     image_processing_[ii].Process(img->data(),
                                   img->Width(),
                                   img->Height(),
@@ -292,9 +303,43 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
       continue;
     }
 
+    if (FLAGS_clip_good && tracking_good_[ii] && (ii == 0)) {
+      good_frame_.push_back(true);
+      hal::ImageMsg* img_message = msg.mutable_camera()->add_image();
+      img_message->set_height(img->Height());
+      img_message->set_width(img->Width());
+      cv::Mat image(img->Height(), img->Width(), CV_8UC1);
+      memcpy(img->Mat().data, image.data, img->Height()*img->Width());
+      img_message->set_data(image.data, img->Height()*img->Width());
+      img_message->set_format( hal::PB_LUMINANCE );
+      img_message->set_type( hal::PB_UNSIGNED_BYTE );
+      if (ii == n - 1) {
+        logger_.LogMessage(msg);
+      }
+    }
+
+
+    // Print out the binary pattern of the grid in which we're interested.
+    // std::ofstream("target.csv", std::ios_base::trunc) <<
+    //   target_[ii].GetBinaryPattern(0) << std::endl;
+
     // Generate map and point structures
     for (size_t i = 0; i < conics.size(); ++i) {
       ellipses[ii].push_back(conics[i].center);
+      if (FLAGS_output_conics) {
+        const Eigen::Vector3d& pos_3d =
+            target_[ii].Circles3D()[ellipse_target__map[i]];
+       if( ellipse_target__map[i] < 0 ){
+         continue;
+       }
+
+       std::cout << num_frames_ << "," << ellipse_target__map[i] <<
+                        "," << conics[i].center[0] << "," <<
+                        conics[i].center[1] << "," <<
+                        pos_3d[0] << "," << pos_3d[1] << "," << pos_3d[2] <<
+                        std::endl;
+      }
+
     }
 
     // find camera pose given intrinsics
@@ -398,6 +443,50 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   }
 }
 
+inline Eigen::Matrix<double, 6, 1> _T2Cart(const Eigen::Matrix4d& T) {
+  Eigen::Matrix<double, 6, 1> Cart;
+  Eigen::Matrix<double, 3, 3> R = T.block<3, 3>(0, 0);
+  Eigen::Vector3d rpq;
+  // roll
+  rpq[0] = atan2(R(2, 1), R(2, 2));
+
+  // pitch
+  double det = -R(2, 0) * R(2, 0) + 1.0;
+  if (det <= 0) {
+    if (R(2, 0) > 0) {
+      rpq[1] = -M_PI / 2.0;
+    } else {
+      rpq[1] = M_PI / 2.0;
+    }
+  } else {
+    rpq[1] = -asin(R(2, 0));
+  }
+
+  // yaw
+  rpq[2] = atan2(R(1, 0), R(0, 0));
+
+  Cart[0] = T(0, 3);
+  Cart[1] = T(1, 3);
+  Cart[2] = T(2, 3);
+  Cart[3] = rpq[0];
+  Cart[4] = rpq[1];
+  Cart[5] = rpq[2];
+
+  return Cart;
+}
+
+
+//void VicalibTask::WritePoses()
+//{
+//  FILE* f = fopen("poses.txt", "w");
+//  for (int ii = 0; ii < t_cw_.size(); ii++) {
+//    Eigen::Matrix<double, 6, 1> pose;
+//    pose = _T2Cart(t_cw_[ii].inverse().matrix());
+//    fprintf(f, "%f\t%f\t%f\t%f\t%f\t%f\n", pose(0), pose(1), pose(2), pose(3), pose(4), pose(5));
+//  }
+//  fclose(f);
+//}
+
 #ifdef HAVE_PANGOLIN
 
 void VicalibTask::Draw3d() {
@@ -418,7 +507,7 @@ void VicalibTask::Draw3d() {
   }
 
   for (size_t c = 0; c < calibrator_.NumCameras(); ++c) {
-    const Eigen::Matrix3d k_inv = calibrator_.GetCamera(c).camera.Kinv();
+    const Eigen::Matrix3d k_inv = calibrator_.GetCamera(c).camera->K().inverse();
 
     const CameraAndPose cap = calibrator_.GetCamera(c);
     const Sophus::SE3d t_ck = cap.T_ck;
@@ -538,7 +627,7 @@ void VicalibTask::Draw2d() {
         for (size_t k = 0; k < code_points.size(); k++) {
           const Eigen::Vector3d& xwp = code_points[k];
           Eigen::Vector2d pt;
-          pt = cap.camera.Project(t_cw_[c] * xwp);
+          pt = cap.camera->Project(t_cw_[c] * xwp);
           if (pt[0] < kImageBoundaryRegion ||
               pt[0] >= images_->at(c)->Width() - kImageBoundaryRegion ||
               pt[1] < kImageBoundaryRegion ||
@@ -625,7 +714,7 @@ void VicalibTask::Finish(const std::string& output_filename) {
 }
 
 std::vector<bool> VicalibTask::AddSuperFrame(
-    const std::shared_ptr<pb::ImageArray>& images) {
+    const std::shared_ptr<hal::ImageArray>& images) {
   images_ = images;
 
   int num_new_frames = 0;
@@ -634,17 +723,41 @@ std::vector<bool> VicalibTask::AddSuperFrame(
 
   DLOG(INFO) << "Frame timestamps: ";
   for (int ii = 0; ii < images_->Size(); ++ii) {
-    std::shared_ptr<pb::Image> image = images_->at(ii);
+    std::shared_ptr<hal::Image> image = images_->at(ii);
 
     const double timestamp =
         FLAGS_use_system_time ? images->Ref().system_time() :
         (image->Timestamp() == 0 ? images->Timestamp() : image->Timestamp());
-    DLOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
-                  " images: " << images->Timestamp() << " sys: " <<
-                  images->Ref().system_time() << " final: " << timestamp;
+
+    LOG(INFO) << ii << ": " << std::fixed << " image: " << image->Timestamp() <<
+                 " images: " << images->Timestamp() << " sys: " <<
+                 images->Ref().system_time() << " final: " << timestamp;
+
+    // If we're finding the time offset, initialize it here.
+    if (FLAGS_find_time_offset && FLAGS_calibrate_imu &&
+        image_time_offset == -1) {
+      if (FLAGS_use_system_time) {
+        // Then there is no need to set the image time offset, as timestamps
+        // should already be synchronized.
+        image_time_offset = 0;
+      } else {
+        if(calibrator_.imu_buffer().elements_.size() != 0){
+          image_time_offset =
+              (calibrator_.imu_buffer().elements_[0].time - timestamp);
+
+          LOG(INFO) << "Setting initial time offset to " <<
+                       image_time_offset;
+        } else {
+          LOG(INFO) << "Not added due to missing IMU.";
+          valid_frames.assign(images_->Size(), false);
+          return valid_frames;
+        }
+      }
+    }
+
     if (timestamp != frame_times_[ii] || !FLAGS_calibrate_imu) {
       num_new_frames++;
-      frame_times_[ii] = timestamp;
+      frame_times_[ii] = timestamp + image_time_offset;
       valid_frames[ii] = true;
     } else {
       valid_frames[ii] = false;
@@ -667,7 +780,7 @@ std::vector<bool> VicalibTask::AddSuperFrame(
   return valid_frames;
 }
 
-void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
+void VicalibTask::AddIMU(const hal::ImuMsg& imu) {
   if (!imu.has_accel()) {
     LOG(ERROR) << "ImuMsg missing accelerometer readings";
   } else if (!imu.has_gyro()) {
@@ -681,7 +794,8 @@ void VicalibTask::AddIMU(const pb::ImuMsg& imu) {
                                                imu.device_time())) {
       LOG(INFO) << "TIMESTAMPINFO: IMU Packet device: "
                << std::fixed << imu.device_time() << " sys: " <<
-                  imu.system_time() << std::endl;
+                  imu.system_time() << " a: " << accel.transpose() << " g: " <<
+                  gyro.transpose() << std::endl;
     }
 
     vicon_calibrator_.AddImuMeasurements
@@ -751,15 +865,15 @@ void VicalibTask::CalibrateVicon() {
 bool CameraCalibrationsDiffer(const CameraAndPose& last,
                          const CameraAndPose& current) {
   // First comparing intrinsics of the camera.
-  if (last.camera.Type() != current.camera.Type()) {
+  if (last.camera->Type() != current.camera->Type()) {
     LOG(ERROR) << "Camera calibrations are different types: "
-               << last.camera.Type() << " vs. "
-               << current.camera.Type();
+               << last.camera->Type() << " vs. "
+               << current.camera->Type();
     return true;
   }
 
-  Eigen::VectorXd lastParams = last.camera.GenericParams();
-  Eigen::VectorXd currentParams = current.camera.GenericParams();
+  Eigen::VectorXd lastParams = last.camera->GetParams();
+  Eigen::VectorXd currentParams = current.camera->GetParams();
 
   LOG(INFO) << "Comparing old camera calibration: " << lastParams
             << " to new calibration: " << currentParams;
@@ -782,12 +896,12 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
     return true;
   }
 
-  if (current.camera.Type() == "calibu_fu_fv_u0_v0" &&
+  if (current.camera->Type() == "FovCamera" &&
       std::abs(lastParams[4] - currentParams[4]) > FLAGS_max_fov_w_diff) {
     LOG(ERROR) << "fov distortion differs too much ("
                << lastParams[4] - currentParams[4] << ")";
     return true;
-  } else if (current.camera.Type() == "calibu_fu_fv_u0_v0_k1_k2_k3") {
+  } else if (current.camera->Type() == "Poly3Camera") {
     double d1 = std::abs(lastParams[4] - currentParams[4]);
     double d2 = std::abs(lastParams[5] - currentParams[5]);
     double d3 = std::abs(lastParams[6] - currentParams[6]);
@@ -801,7 +915,7 @@ bool CameraCalibrationsDiffer(const CameraAndPose& last,
     }
   }
 
-  // Now, coparison for extrinsics will start.
+  // Now, comparison for extrinsics will start.
   // First, comparison of psoition of camera. Comparison here is done by
   // calculating distance as that requires user to specify only one threshold.
   Eigen::Vector3d lastTrans = last.T_ck.translation();
@@ -867,12 +981,12 @@ bool IMUCalibrationDiffer(const Vector6d &last,
 
 bool VicalibTask::IsSuccessful() const {
   std::vector<double> errors = calibrator_.GetCameraProjRMSE();
-  for (size_t i = 0; i < nstreams_; ++i) {
-    if (errors[i] > max_reproj_errors_[i]) {
-      LOG(WARNING) << "Reprojection error of " << errors[i]
+  for (size_t ii = 0; ii < nstreams_; ++ii) {
+    if (errors[ii] > max_reproj_errors_[ii]) {
+      LOG(WARNING) << "Reprojection error of " << errors[ii]
                    << " was greater than maximum of "
-                   << max_reproj_errors_[i]
-                   << " for camera " << i;
+                   << max_reproj_errors_[ii]
+                   << " for camera " << ii;
       return false;
     }
   }
