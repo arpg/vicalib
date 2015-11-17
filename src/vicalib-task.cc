@@ -2,7 +2,7 @@
 
 #include <time.h>
 #include <random>
-#include <CVars/CVar.h>
+#include <cvars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
 #include <HAL/Messages/Matrix.h>
