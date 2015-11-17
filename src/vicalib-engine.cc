@@ -9,6 +9,8 @@
 #include <fstream>
 
 #include <calibu/cam/camera_xml.h>
+#include <calibu/cam/camera_models_crtp.h>
+#include <calibu/cam/camera_models_rational.h>
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
 #include <calibu/target/GridDefinitions.h>
@@ -223,15 +225,25 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
+      } else if (type == "rational6" || type == "rational") {
+		Eigen::Vector2i size_;
+		Eigen::VectorXd params_(calibu::Rational6Camera<double>::NumParams);
+		size_ << w, h;
+		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+		std::shared_ptr<calibu::CameraInterface<double>>
+		starting_cam(new calibu::Rational6Camera<double>(params_, size_));
+		starting_cam->SetType("calibu_fu_fv_u0_v0_rational6");
+		input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+
       } else if (type == "kb4") {
-        Eigen::Vector2i size_;
-        Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
-        size_ << w, h;
-        params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
-        std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
-        starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
-        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+		Eigen::Vector2i size_;
+		Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+		size_ << w, h;
+		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+		std::shared_ptr<calibu::CameraInterface<double>>
+		  starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
+		starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
+		input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "linear") {
         Eigen::Vector2i size_;
