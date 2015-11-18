@@ -3,14 +3,13 @@
 
 #include <time.h>
 #include <random>
-#include <cvars/CVar.h>
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
 #include <HAL/Messages/Matrix.h>
 
 #ifdef HAVE_PANGOLIN
 #include <calibu/gl/Drawing.h>
-#include <pangolin/gldraw.h>
+#include <pangolin/gl/gldraw.h>
 #endif  // HAVE_PANGOLIN
 
 DECLARE_bool(calibrate_imu);      // Defined in vicalib-engine.cc
@@ -205,12 +204,12 @@ void VicalibTask::SetupGUI()
     std::stringstream ss;
     ss << i;
     std::string istr = ss.str();
-    CVarUtils::AttachCVar("proc.adaptive.threshold_" + istr,
-                          &image_processing_[i].Params().at_threshold);
-    CVarUtils::AttachCVar("proc.adaptive.window_ratio_" + istr,
-                          &image_processing_[i].Params().at_window_ratio);
-    CVarUtils::AttachCVar("proc.black_on_white_" + istr,
-                          &image_processing_[i].Params().black_on_white);
+    pangolin::Var<float>::Attach("proc.adaptive.threshold_" + istr,
+                          image_processing_[i].Params().at_threshold);
+    pangolin::Var<int>::Attach("proc.adaptive.window_ratio_" + istr,
+                          image_processing_[i].Params().at_window_ratio);
+    pangolin::Var<bool>::Attach("proc.black_on_white_" + istr,
+                          image_processing_[i].Params().black_on_white);
     textures_[i].Reinitialise(width(i), height(i), GL_LUMINANCE8);
   }
 

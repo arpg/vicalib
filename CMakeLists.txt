@@ -43,7 +43,6 @@ endif()
 # Find required dependencies
 find_package( Calibu REQUIRED )
 find_package( Ceres REQUIRED )
-find_package( CVars REQUIRED )
 find_package( GFlags REQUIRED )
 find_package( GLog REQUIRED )
 find_package( HAL REQUIRED )
@@ -55,21 +54,10 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc videoio)
 endif()
 find_package( Pangolin REQUIRED )
 
-# Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
-if(FREEGLUT_FOUND AND NOT HAVE_MODIFIED_OSXGLUT)
-  set(HAVE_FREEGLUT 1)
-  list(APPEND LIB_INC_DIR  ${FREEGLUT_INCLUDE_DIR} )
-  list(APPEND LINK_LIBS ${FREEGLUT_LIBRARY} )
-elseif(GLUT_FOUND)
-  list(APPEND LIB_INC_DIR  ${GLUT_INCLUDE_DIR} )
-  list(APPEND LINK_LIBS ${GLUT_LIBRARY} )
-endif()
-
 list(APPEND LINK_LIBS
   ${HAL_LIBRARIES}
   ${Calibu_LIBRARIES}
   ${CERES_LIBRARIES}
-  ${CVars_LIBRARIES}
   ${GFlags_LIBRARIES}
   ${GLOG_LIBRARIES}
   ${Pangolin_LIBRARIES}
@@ -80,7 +68,6 @@ list(APPEND PROJ_INCLUDE_DIRS
   ${Pangolin_INCLUDE_DIRS}
   ${HAL_INCLUDE_DIRS}
   ${Calibu_INCLUDE_DIRS}
-  ${CVars_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
   ${GFlags_INCLUDE_DIR}
   )

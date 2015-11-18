@@ -17,7 +17,7 @@
 #ifndef VISUAL_INERTIAL_CALIBRATION_GL_LINE_STRIP_H_
 #define VISUAL_INERTIAL_CALIBRATION_GL_LINE_STRIP_H_
 
-#include <pangolin/gl.h>
+#include <pangolin/gl/gl.h>
 #include <vector>
 #include <Eigen/StdVector>
 
