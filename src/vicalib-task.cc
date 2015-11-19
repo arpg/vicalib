@@ -1,4 +1,5 @@
 #include <vicalib/vicalib-task.h>
+#include <vicalib/eigen-alignment.h>
 
 #include <time.h>
 #include <random>
@@ -79,8 +80,7 @@ VicalibTask::VicalibTask(
         double grid_spacing,
         const Eigen::MatrixXi& grid,
         bool fix_intrinsics,
-        const std::vector<CameraAndPose,
-        Eigen::aligned_allocator<CameraAndPose> >& input_cameras,
+        const aligned_vector<CameraAndPose>& input_cameras,
         const std::vector<double>& max_reproj_errors) :
     image_processing_(),
     conic_finder_(num_streams),
