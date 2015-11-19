@@ -10,7 +10,6 @@
 
 #include <calibu/cam/camera_xml.h>
 #include <calibu/cam/camera_models_crtp.h>
-#include <calibu/cam/camera_models_rational.h>
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/target/RandomGrid.h>
 #include <calibu/target/GridDefinitions.h>
@@ -201,7 +200,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.2;
         std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::FovCamera<double>(params_, size_));
+            starting_cam(new calibu::FovCamera<double>(params_, size_));
         starting_cam->SetType("calibu_fu_fv_u0_v0_w");
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
@@ -211,7 +210,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
         std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::Poly2Camera<double>(params_, size_));
+            starting_cam(new calibu::Poly2Camera<double>(params_, size_));
         starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2");
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
@@ -221,7 +220,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
         std::shared_ptr<calibu::CameraInterface<double>>
-          starting_cam(new calibu::Poly3Camera<double>(params_, size_));
+            starting_cam(new calibu::Poly3Camera<double>(params_, size_));
         starting_cam->SetType("calibu_fu_fv_u0_v0_k1_k2_k3");
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
