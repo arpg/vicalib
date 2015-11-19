@@ -38,6 +38,7 @@
 #endif  // CALIBU_CERES_COVAR
 #include <calibu/cam/camera_crtp.h>
 #include <calibu/cam/camera_models_crtp.h>
+#include <calibu/cam/camera_models_rational.h>
 #include <calibu/cam/camera_crtp_impl.h>
 #include <calibu/cam/camera_xml.h>
 #include <calibu/calib/CostFunctionAndParams.h>
@@ -425,13 +426,21 @@ class ViCalibrator : public ceres::IterationCallback {
           calibu::Poly3Camera<double>::NumParams>(
           new ImuReprojectionCostFunctor<calibu::Poly3Camera<double>>(p_w, p_c));
 
-    } else if (dynamic_cast<calibu::KannalaBrandtCamera<double>*>( interface.get())) {
+    } else if (dynamic_cast<calibu::Rational6Camera<double>*>( interface.get())) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
-          ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>, 2,
+          ImuReprojectionCostFunctor<calibu::Rational6Camera<double>>, 2,
           Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
-          calibu::KannalaBrandtCamera<double>::NumParams>(
-          new ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>(p_w, p_c));
-    } else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
+          calibu::Rational6Camera<double>::NumParams>(
+          new ImuReprojectionCostFunctor<calibu::Rational6Camera<double>>(p_w, p_c));
+
+    } else if (dynamic_cast<calibu::KannalaBrandtCamera<double>*>( interface.get())) {
+          cost->Cost() = new ceres::AutoDiffCostFunction<
+              ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>, 2,
+              Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
+              calibu::KannalaBrandtCamera<double>::NumParams>(
+              new ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>(p_w, p_c));
+
+	} else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
           ImuReprojectionCostFunctor<calibu::LinearCamera<double>>, 2,
           Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
