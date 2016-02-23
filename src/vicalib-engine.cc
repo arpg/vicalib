@@ -90,6 +90,7 @@ DEFINE_double(grid_large_rad, 0.00423,
               "Radius of large dots (m) (necessary to save the pattern).");
 DEFINE_double(grid_small_rad, 0.00283,
               "Radius of small dots (m) (necessary to save the pattern).");
+DEFINE_int32(max_iters, 200, "Max iterations.");
 
 DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
               "Sigma of gyroscope measurements.");

@@ -54,6 +54,7 @@
 
 DECLARE_string(output_log_file);
 DECLARE_bool(calibrate_imu);  // Defined in vicalib-engine.cc
+DECLARE_int32(max_iters);     // Defined in vicalib-engine.cc
 
 namespace visual_inertial_calibration {
 
@@ -135,6 +136,7 @@ class ViCalibrator : public ceres::IterationCallback {
     prob_options_.loss_function_ownership = ceres::DO_NOT_TAKE_OWNERSHIP;
 
     solver_options_.num_threads = 4;
+    solver_options_.max_num_iterations = FLAGS_max_iters;
 
 #ifdef ANDROID
     solver_options_.sparse_linear_algebra_library_type = ceres::CX_SPARSE;
@@ -697,13 +699,10 @@ class ViCalibrator : public ceres::IterationCallback {
 
     // Ceres calls this twice per iteration and gradient_norm is 0 (erroneously)
     static const double kNormThreshold = 1e-9;
-    static const int kMaxSolverIterations = 200;
     if (summary.gradient_norm > 0 && summary.gradient_norm < kNormThreshold) {
       LOG(INFO) << "Terminating optimization as gradient norm = "
                 << summary.gradient_norm << " < " << kNormThreshold;
       return ceres::SOLVER_TERMINATE_SUCCESSFULLY;
-    } else if (summary.iteration > kMaxSolverIterations) {
-      return ceres::SOLVER_ABORT;
     } else {
       return ceres::SOLVER_CONTINUE;
     }
