@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 08b85f4..6cd4810 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -99,7 +99,7 @@ install_package(
+     DESCRIPTION "C++ implementation of Lie Groups using Eigen."
+     INSTALL_INCLUDE_DIR true
+     DESTINATION ${CMAKE_INSTALL_PREFIX}
+-    INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR}
++    INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR} ${Sophus_INCLUDE_DIR}
+     )
+ 
+ ###########################

@@ -1,0 +1,201 @@
+diff --git a/cmake/CMakeLists.txt b/cmake/CMakeLists.txt
+index 7618ba2..d524be3 100644
+--- a/cmake/CMakeLists.txt
++++ b/cmake/CMakeLists.txt
+@@ -166,7 +166,9 @@ endif (protobuf_UNICODE)
+ include(libprotobuf-lite.cmake)
+ include(libprotobuf.cmake)
+ include(libprotoc.cmake)
+-include(protoc.cmake)
++if(NOT CMAKE_CROSSCOMPILING)
++  include(protoc.cmake)
++endif()
+ 
+ if (protobuf_BUILD_TESTS)
+   include(tests.cmake)
+diff --git a/cmake/install.cmake b/cmake/install.cmake
+index 441bf55..3527e73 100644
+--- a/cmake/install.cmake
++++ b/cmake/install.cmake
+@@ -19,8 +19,10 @@ foreach(_library
+     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${_library})
+ endforeach()
+ 
+-install(TARGETS protoc EXPORT protobuf-targets
+-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc)
++if(NOT CMAKE_CROSSCOMPILING)
++  install(TARGETS protoc EXPORT protobuf-targets
++    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc)
++endif()
+ 
+ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/protobuf.pc ${CMAKE_CURRENT_BINARY_DIR}/protobuf-lite.pc DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+ 
+@@ -100,8 +102,13 @@ configure_file(protobuf-module.cmake.in
+ configure_file(protobuf-options.cmake
+   ${CMAKE_INSTALL_CMAKEDIR}/protobuf-options.cmake @ONLY)
+ 
++set(protoc_target)
++if(NOT CMAKE_CROSSCOMPILING)
++  set(protoc_target protoc)
++endif()
++
+ # Allows the build directory to be used as a find directory.
+-export(TARGETS libprotobuf-lite libprotobuf libprotoc protoc
++export(TARGETS libprotobuf-lite libprotobuf libprotoc ${protoc_target}
+   NAMESPACE protobuf::
+   FILE ${CMAKE_INSTALL_CMAKEDIR}/protobuf-targets.cmake
+ )
+diff --git a/cmake/libprotobuf.cmake b/cmake/libprotobuf.cmake
+index 72db915..1f3365a 100644
+--- a/cmake/libprotobuf.cmake
++++ b/cmake/libprotobuf.cmake
+@@ -118,6 +118,9 @@ target_link_libraries(libprotobuf ${CMAKE_THREAD_LIBS_INIT})
+ if(protobuf_WITH_ZLIB)
+     target_link_libraries(libprotobuf ${ZLIB_LIBRARIES})
+ endif()
++if(ANDROID)
++    target_link_libraries(libprotobuf log)
++endif()
+ target_include_directories(libprotobuf PUBLIC ${protobuf_source_dir}/src)
+ if(MSVC AND protobuf_BUILD_SHARED_LIBS)
+   target_compile_definitions(libprotobuf
+diff --git a/cmake/libprotoc.cmake b/cmake/libprotoc.cmake
+index 8ac8d47..3676ec8 100644
+--- a/cmake/libprotoc.cmake
++++ b/cmake/libprotoc.cmake
+@@ -210,12 +210,21 @@ set(js_well_known_types_sources
+   ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types/struct.js
+   ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types/timestamp.js
+ )
+-add_executable(js_embed ${protobuf_source_dir}/src/google/protobuf/compiler/js/embed.cc)
+-add_custom_command(
+-  OUTPUT ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
+-  DEPENDS js_embed ${js_well_known_types_sources}
+-  COMMAND js_embed ${js_well_known_types_sources} > ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
+-)
++if(NOT CMAKE_CROSSCOMPILING)
++  add_executable(js_embed ${protobuf_source_dir}/src/google/protobuf/compiler/js/embed.cc)
++  add_custom_command(
++    OUTPUT ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
++    DEPENDS js_embed ${js_well_known_types_sources}
++    COMMAND js_embed ${js_well_known_types_sources} > ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
++  )
++else()
++  add_custom_command(
++    OUTPUT ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
++    COMMAND ${PROTOBUF_js_embed_EXECUTABLE} ${js_well_known_types_sources} > ${protobuf_source_dir}/src/google/protobuf/compiler/js/well_known_types_embed.cc
++  )
++endif()
++
++
+ 
+ add_library(libprotoc ${protobuf_SHARED_OR_STATIC}
+   ${libprotoc_files} ${libprotoc_headers})
+diff --git a/cmake/protobuf-config.cmake.in b/cmake/protobuf-config.cmake.in
+index 8321354..c2557e3 100644
+--- a/cmake/protobuf-config.cmake.in
++++ b/cmake/protobuf-config.cmake.in
+@@ -7,16 +7,23 @@ include("${CMAKE_CURRENT_LIST_DIR}/protobuf-options.cmake")
+ # Imported targets
+ include("${CMAKE_CURRENT_LIST_DIR}/protobuf-targets.cmake")
+ 
++if(NOT TARGET protobuf::protoc)
++  add_executable(protobuf::protoc IMPORTED)
++  set_target_properties(protobuf::protoc PROPERTIES IMPORTED_LOCATION ${PROTOBUF_PROTOC_EXECUTABLE})
++endif()
++
+ function(protobuf_generate)
+   include(CMakeParseArguments)
+-  set(_singleargs LANGUAGE OUT_VAR)
++  set(_options APPEND_PATH)
++  set(_singleargs LANGUAGE OUT_VAR EXPORT)
+   if(COMMAND target_sources)
+     list(APPEND _singleargs TARGET)
+   endif()
++  set(_multiargs PROTOS IMPORT_DIRS GENERATE_EXTENSIONS)
+ 
+-  cmake_parse_arguments(protobuf_generate "APPEND_PATH" "${_singleargs}" "PROTOS IMPORT_DIRS GENERATE_EXTENSIONS" "${ARGN}")
++  cmake_parse_arguments(protobuf_generate "${_options}" "${_singleargs}" "${_multiargs}" "${ARGN}")
+ 
+-  if(protobuf_generate_PROTOS AND NOT protobuf_generate_TARGET)
++  if(NOT protobuf_generate_PROTOS AND NOT protobuf_generate_TARGET)
+     message(SEND_ERROR "Error: protobuf_generate called without any targets or source files")
+     return()
+   endif()
+@@ -46,10 +53,12 @@ function(protobuf_generate)
+     # Create an include path for each file specified
+     foreach(_file ${ARGN})
+       get_filename_component(_abs_file ${_file} ABSOLUTE)
+-      get_filename_component(_abs_path ${_abs_file} PATH)
+-      list(FIND _protobuf_include_path ${_abs_path} _contains_already)
+-      if(${_contains_already} EQUAL -1)
+-          list(APPEND _protobuf_include_path -I ${_abs_path})
++      if(EXISTS ${_abs_file})
++        get_filename_component(_abs_path ${_abs_file} PATH)
++        list(FIND _protobuf_include_path ${_abs_path} _contains_already)
++        if(${_contains_already} EQUAL -1)
++            list(APPEND _protobuf_include_path -I ${_abs_path})
++        endif()
+       endif()
+     endforeach()
+   else()
+@@ -83,14 +92,16 @@ function(protobuf_generate)
+     get_filename_component(_abs_file ${_proto} ABSOLUTE)
+     get_filename_component(_basename ${_proto} NAME_WE)
+ 
+-    foreach(_ext ${_output_extensions})
++    set(_current_generated_srcs)
++    foreach(_ext ${protobuf_GENERATE_EXTENSIONS})
+       list(APPEND _generated_srcs "${CMAKE_CURRENT_BINARY_DIR}/${_basename}${_ext}")
++      list(APPEND _current_generated_srcs "${CMAKE_CURRENT_BINARY_DIR}/${_basename}${_ext}")
+     endforeach()
+ 
+     add_custom_command(
+-      OUTPUT ${_generated_srcs}
++      OUTPUT ${_current_generated_srcs}
+       COMMAND  protobuf::protoc
+-      ARGS --${protobuf_generate_LANGUAGE}_out  ${CMAKE_CURRENT_BINARY_DIR} ${_protobuf_include_path} ${_abs_file}
++      ARGS --${protobuf_generate_LANGUAGE}_out=${protobuf_generate_EXPORT}${CMAKE_CURRENT_BINARY_DIR} ${_protobuf_include_path} ${_abs_file}
+       DEPENDS ${ABS_FIL} protobuf::protoc
+       COMMENT "Running ${protobuf_generate_LANGUAGE} protocol buffer compiler on ${_proto}"
+       VERBATIM )
+diff --git a/cmake/protobuf-module.cmake.in b/cmake/protobuf-module.cmake.in
+index 8e4920a..52e75e9 100644
+--- a/cmake/protobuf-module.cmake.in
++++ b/cmake/protobuf-module.cmake.in
+@@ -11,12 +11,16 @@ function(PROTOBUF_GENERATE_CPP SRCS HDRS)
+     set(_append_arg APPEND_PATH)
+   endif()
+ 
++  if(PROTOBUF_GENERATE_CPP_EXPORT)
++    set(_export EXPORT)
++  endif()
++
+   if(DEFINED Protobuf_IMPORT_DIRS)
+     set(_import_arg IMPORT_DIRS ${Protobuf_IMPORT_DIRS})
+   endif()
+ 
+   set(_outvar)
+-  protobuf_generate(${append_arg} LANGUAGE cpp OUT_VAR _outvar ${_import_arg} PROTOS ${ARGN})
++  protobuf_generate(${_append_arg} ${_export} ${PROTOBUF_GENERATE_CPP_EXPORT} LANGUAGE cpp OUT_VAR _outvar ${_import_arg} PROTOS ${ARGN})
+ 
+   set(${SRCS})
+   set(${HDRS})
+@@ -141,11 +145,13 @@ get_target_property(Protobuf_INCLUDE_DIRS protobuf::libprotobuf
+   INTERFACE_INCLUDE_DIRECTORIES)
+ 
+ # Set the protoc Executable
+-get_target_property(Protobuf_PROTOC_EXECUTABLE protobuf::protoc
+-  IMPORTED_LOCATION_RELEASE)
+-if(NOT EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
++if(NOT CMAKE_CROSSCOMPILING)
+   get_target_property(Protobuf_PROTOC_EXECUTABLE protobuf::protoc
+-    IMPORTED_LOCATION_DEBUG)
++    IMPORTED_LOCATION_RELEASE)
++  if(NOT EXISTS "${Protobuf_PROTOC_EXECUTABLE}")
++    get_target_property(Protobuf_PROTOC_EXECUTABLE protobuf::protoc
++      IMPORTED_LOCATION_DEBUG)
++  endif()
+ endif()
+ 
+ # Version info variable

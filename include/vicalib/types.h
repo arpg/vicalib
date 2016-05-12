@@ -38,7 +38,11 @@ namespace visual_inertial_calibration {
 
 // Shortcut for calibration provider gravity magnitude
 inline double gravity() {
-  return 9.8007;  // m/s^2
+  //return 9.8007;  // m/s^2
+    return 9.80665;  // m/s^2
+    //return 9.871;  // m/s^2
+    //return 9.82;  // m/s^2
+    //return 9.799129;  // 37.384813, -121.963970  12m http://www.ptb.de/cartoweb3/SISproject.php http://www.gpsvisualizer.com/elevation
 }
 
 // Represents a 6-DOF position for a "rig" of multiple cameras.

@@ -1,0 +1,1 @@
+GLOG_log_dir=$1/vifisheye ./vicalib -models fov -grid_preset=large -cam file://$1/vifisheye/*.pgm -imu csv://$1/vifisheye/  -output_json $1/vifisheye/camera.`date +%Y%m%d-%H%M%S`.json -output $1/vifisheye/camera.`date +%Y%m%d-%H%M%S`.xml  -use_only_when_static -has_initial_guess -model_files ../data/alloy-initialization.xml -accel_sigma 0.0707 -gyro_sigma 0.01414

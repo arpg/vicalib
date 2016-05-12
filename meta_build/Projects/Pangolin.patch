@@ -1,0 +1,194 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 97e4edd..592d61b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,6 +14,10 @@ include( install_package )
+ option( BUILD_SHARED_LIBS "Build Shared Library" ON)
+ option( BUILD_EXAMPLES "Build Examples" ON )
+ option( CPP11_NO_BOOST "Use c++11 over boost for threading etc." ON )
++option( BUILD_WITH_CVARS "Use CVars" ON )
++option( BUILD_WITH_PNG "Use PNG" ON )
++option( BUILD_WITH_JPEG "Use JPEG" ON )
++option( BUILD_WITH_TIFF "Use TIFF" ON )
+ 
+ if(CPP11_NO_BOOST AND NOT MSVC)
+     set( CMAKE_CXX_FLAGS "-std=c++11 -Wall ${CMAKE_CXX_FLAGS}" )
+@@ -175,14 +179,17 @@ if(BUILD_PANGOLIN_GUI)
+         list(APPEND USER_INC  "${OPENGL_INCLUDE_DIR}" )
+         list(APPEND LINK_LIBS "${OPENGL_LIBRARIES}" )
+ 
+-        find_package(GLEW REQUIRED QUIET)
+-        if(GLEW_FOUND)
+-            list(APPEND USER_INC  "${GLEW_INCLUDE_DIR}" )
+-            list(APPEND LINK_LIBS "${GLEW_LIBRARY}" )
++        find_package(glew REQUIRED QUIET CONFIG)
++        if(glew_FOUND)
++            list(APPEND LINK_LIBS GLEW::glew )
+             set(HAVE_GLEW 1)
+         endif()
+     endif()
+ 
++    if(UNIX)
++        list(APPEND LINK_LIBS "Xrandr;Xi" )
++    endif()
++
+     if( HAVE_GLES_2 )
+         # Add Pangolins backwards compat layer.
+         list(APPEND HEADERS ${INCDIR}/gl2engine.h )
+@@ -210,7 +217,7 @@ else()
+       message(STATUS "CUDA Found and Enabled")
+     endif()
+ 
+-    find_package(FREEGLUT QUIET)
++    find_package(FreeGLUT QUIET CONFIG)
+     find_package(GLUT QUIET)
+ 
+     if(_OSX_)
+@@ -225,10 +232,10 @@ else()
+ 
+     # Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
+     option(FORCE_FREEGLUT "Force use of freeglut if found." OFF)
+-    if(FREEGLUT_FOUND AND (NOT HAVE_MODIFIED_OSXGLUT OR FORCE_FREEGLUT))
++    if(FreeGLUT_FOUND AND (NOT HAVE_MODIFIED_OSXGLUT OR FORCE_FREEGLUT))
+       set(HAVE_FREEGLUT 1)
+-      list(APPEND USER_INC  ${FREEGLUT_INCLUDE_DIR} )
+-      list(APPEND LINK_LIBS ${FREEGLUT_LIBRARY} )
++      add_definitions(-DFREEGLUT_LIB_PRAGMAS=0)
++      list(APPEND LINK_LIBS FreeGLUT::freeglut_static )
+     elseif(GLUT_FOUND)
+       list(APPEND USER_INC  ${GLUT_INCLUDE_DIR} )
+       list(APPEND LINK_LIBS ${GLUT_LIBRARY} )
+@@ -242,7 +249,7 @@ else()
+       endif()
+     endif()
+ 
+-    if(FREEGLUT_FOUND OR GLUT_FOUND)
++    if(FreeGLUT_FOUND OR GLUT_FOUND)
+         set(HAVE_GLUT 1)
+         list(APPEND HEADERS ${INCDIR}/display_glut.h )
+         list(APPEND SOURCES ${SRCDIR}/display_glut.cpp )
+@@ -251,7 +258,7 @@ else()
+ endif()
+ 
+ find_package(CVARS 2.3 QUIET)
+-if(CVARS_FOUND)
++if(CVARS_FOUND AND BUILD_WITH_CVARS)
+   set(HAVE_CVARS 1)
+   list(APPEND USER_INC  ${CVars_INCLUDE_DIRS} )
+   list(APPEND LINK_LIBS ${CVars_LIBRARIES} )
+@@ -351,7 +358,7 @@ if(BUILD_PANGOLIN_VIDEO AND DepthSense_FOUND)
+ endif()
+ 
+ find_package(PNG QUIET)
+-if(PNG_FOUND)
++if(PNG_FOUND AND BUILD_WITH_PNG)
+   # (ZLIB is also found by FindPNG.cmake as its dependency)
+   set(HAVE_PNG 1)
+   list(APPEND INTERNAL_INC ${PNG_INCLUDE_DIR} )
+@@ -360,7 +367,7 @@ if(PNG_FOUND)
+ endif()
+ 
+ find_package(JPEG QUIET)
+-if(JPEG_FOUND)
++if(JPEG_FOUND AND BUILD_WITH_JPEG)
+   set(HAVE_JPEG 1)
+   list(APPEND INTERNAL_INC ${JPEG_INCLUDE_DIR} )
+   list(APPEND LINK_LIBS ${JPEG_LIBRARY} )
+@@ -368,7 +375,7 @@ if(JPEG_FOUND)
+ endif()
+ 
+ find_package(TIFF QUIET)
+-if(TIFF_FOUND)
++if(TIFF_FOUND AND BUILD_WITH_TIFF)
+   set(HAVE_TIFF 1)
+   list(APPEND INTERNAL_INC ${TIFF_INCLUDE_DIR} )
+   list(APPEND LINK_LIBS ${TIFF_LIBRARY} )
+@@ -386,6 +393,10 @@ configure_file(
+ 
+ #######################################################
+ 
++if(TARGET FreeGLUT::freeglut_static)
++  ADD_DEFINITIONS(-DFREEGLUT_STATIC)
++endif()
++
+ set( REQUIRED_INCLUDE_DIRS ${INTERNAL_INC} ${USER_INC} )
+ set( REQUIRED_LIBRARIES ${LINK_LIBS} )
+ set( PANGOLIN_SRCS ${SOURCES} )
+@@ -400,16 +411,23 @@ include_directories( ${CMAKE_SOURCE_DIR}/include ${CMAKE_BINARY_DIR} )
+ add_library( pangolin ${PANGOLIN_SRCS} ${PANGOLIN_HDRS} )
+ target_link_libraries( pangolin ${REQUIRED_LIBRARIES} )
+ 
++set(GENERATED_HEADERS  "${CMAKE_CURRENT_BINARY_DIR}/include/pangolin/PangolinConfig.h")
++if(WIN32)
++    list(APPEND GENERATED_HEADERS "${CMAKE_CURRENT_BINARY_DIR}/include/pangolin/pangolin_export.h")
++endif()
++
++
+ install_package(
+     PKG_NAME Pangolin
+     LIB_NAME pangolin
+     VERSION ${VERSION}
+     DESCRIPTION "GL wrapper library that permits simpler GUI creation"
+     INSTALL_INCLUDE_DIR true
+-    INSTALL_GENERATED_HEADERS "${CMAKE_CURRENT_BINARY_DIR}/include/pangolin/PangolinConfig.h"
++    INSTALL_GENERATED_HEADERS ${GENERATED_HEADERS}
+     DESTINATION ${CMAKE_INSTALL_PREFIX}
+-    INCLUDE_DIRS ${REQUIRED_INCLUDE_DIRS}
++    INCLUDE_DIRS ${REQUIRED_INCLUDE_DIRS} ${CMAKE_INSTALL_PREFIX}/include
+     LINK_LIBS ${REQUIRED_LIBRARIES}
++    LINK_DIRS ${CMAKE_INSTALL_PREFIX}/lib
+     )
+ 
+ 
+@@ -418,6 +436,7 @@ install_package(
+ 
+ ## Generate symbol export helper header on MSVC
+ IF(MSVC)
++    set(LIBRARY_NAME pangolin)
+     string(TOUPPER ${LIBRARY_NAME} LIBRARY_NAME_CAPS)
+     include(GenerateExportHeader)
+     GENERATE_EXPORT_HEADER( ${LIBRARY_NAME}
+diff --git a/cmake_modules/PackageConfig.cmake.in b/cmake_modules/PackageConfig.cmake.in
+index 56a2ad9..23a424a 100644
+--- a/cmake_modules/PackageConfig.cmake.in
++++ b/cmake_modules/PackageConfig.cmake.in
+@@ -1,3 +1,13 @@
++set(PACKAGE_LINK_LIBS "@PACKAGE_LINK_LIBS@")
++foreach(lib ${PACKAGE_LINK_LIBS})
++    if(${lib} MATCHES "GLEW::glew")
++        find_package(glew REQUIRED QUIET CONFIG)
++    endif()
++    if(${lib} MATCHES "FreeGLUT::freeglut")
++        find_package(FreeGLUT REQUIRED QUIET CONFIG)
++    endif()
++endforeach()
++
+ SET( @PACKAGE_PKG_NAME@_LIBRARIES  "@PACKAGE_LINK_LIBS@" CACHE INTERNAL "@PACKAGE_PKG_NAME@ libraries" FORCE )
+ SET( @PACKAGE_PKG_NAME@_INCLUDE_DIRS  @PACKAGE_INCLUDE_DIRS@ CACHE INTERNAL "@PACKAGE_PKG_NAME@ include directories" FORCE )
+ SET( @PACKAGE_PKG_NAME@_LIBRARY_DIRS @PACKAGE_LINK_DIRS@ CACHE INTERNAL "@PACKAGE_PKG_NAME@ library directories" FORCE )
+diff --git a/cmake_modules/install_package.cmake b/cmake_modules/install_package.cmake
+index 682cc7e..947435e 100644
+--- a/cmake_modules/install_package.cmake
++++ b/cmake_modules/install_package.cmake
+@@ -141,10 +141,19 @@ function(install_package)
+ 
+         # install library itself
+         if( PACKAGE_LIB_NAME )
+-            install( FILES ${_target_library} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib )
++
++			if(MSVC)
++				string(REPLACE "$(Configuration)" "\${BUILD_TYPE}" _target_library ${_target_library})
++			endif()
++
++            install( TARGETS ${PACKAGE_LIB_NAME}
++                RUNTIME DESTINATION bin
++                LIBRARY DESTINATION lib
++                ARCHIVE DESTINATION lib
++                )
+             set( PACKAGE_LIB_LINK "-l${PACKAGE_LIB_NAME}" )
+         endif()
+-    
++
+         # build pkg-config file
+         if( PACKAGE_PKG_NAME )
+             configure_file( ${modules_dir}/PkgConfig.pc.in ${PACKAGE_PKG_NAME}.pc @ONLY )

@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cec4470..817bb58 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,8 +5,8 @@ IF(BIICODE)
+     ENDIF()
+     RETURN()
+ ENDIF(BIICODE)
+-cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
+-cmake_policy(VERSION 2.6)
++cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
++cmake_policy(VERSION 3.2)
+ if(POLICY CMP0063)
+ 	cmake_policy(SET CMP0063 OLD)
+ endif()

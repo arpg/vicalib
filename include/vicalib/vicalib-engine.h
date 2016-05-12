@@ -37,14 +37,14 @@ class VicalibEngine {
   VicalibEngine(const VicalibEngine&) = default;
   ~VicalibEngine();
 
-  void Run();
-  bool CameraLoop();
+  void Run(unsigned char * json_data = nullptr, int json_data_length = 0);
+  bool CameraLoop(unsigned char * json_data = nullptr, int json_data_length = 0);
   void ImuHandler(const hal::ImuMsg& imu);
   std::shared_ptr<CalibrationStats> stats() { return stats_; }
 
  protected:
-  std::shared_ptr<VicalibTask> InitTask();
-  void WriteCalibration();  
+  std::shared_ptr<VicalibTask> InitTask(unsigned char * json_data = nullptr, int json_data_length = 0);
+  void WriteCalibration();
   void CalibrateAndDrawLoop();
   bool SeenEnough() const;
   void CreateGrid();

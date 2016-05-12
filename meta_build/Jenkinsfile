@@ -1,0 +1,132 @@
+pipeline {
+    agent none
+    parameters {
+        booleanParam(name: 'WINDOWS_TEST', defaultValue: false, description: 'Run a dataset on Windows')
+        booleanParam(name: 'BUILD_WINDOWS', defaultValue: false, description: 'Make a Windows build')
+        booleanParam(name: 'RUN_BENCHMARK', defaultValue: false, description: 'Run basic Benchmark')
+        booleanParam(name: 'MAKE_WINDOWS_RELEASE', defaultValue: false, description: 'Create a Windows binary release')
+    }
+    stages {
+        stage('Benchmark') {
+            parallel {
+                stage('CPU') {
+                    agent { label 'linux && vicalib_benchmark && vicalib_new_data' }
+                    stages {
+                        stage('Linux') {
+                            environment {
+                                SSH_KEY = credentials('')
+                                GIT_SSH_COMMAND = "ssh -i ${env.SSH_KEY}"
+                                CCACHE_BASEDIR = "${env.WORKSPACE}"
+                                CTEST_OUTPUT_ON_FAILURE = 1
+                                LIBRARY_PATH = "$LIBRARY_PATH:/opt/intel/ipp/lib/intel64:/opt/intel/mkl/lib/intel64"
+                                CMAKE_INCLUDE_PATH = "/opt/intel/mkl/include"
+                                CMAKE_LIBRARY_PATH = "/opt/intel/ipp/lib/intel64:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64"
+                                LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:$CMAKE_LIBRARY_PATH"
+                                CPATH = "$CPATH:/opt/intel/mkl/include"
+                            }
+                            steps {
+                                    sh 'cmake -GNinja -Bbuild -H. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=False'
+                                    sh 'cmake --build build'
+                            }
+                         }
+                        stage('Prepare Benchmark') {
+                            options { skipDefaultCheckout() }
+                            steps {
+                                sh 'cp -asf --no-preserve=mode $HOME/data_vicalib/ $(realpath .)'
+                                sh 'rsync -a --chmod=ug+rw     $HOME/data_vicalib/ $(realpath .)/data_vicalib/ --include "*/" --exclude "*"'
+                            }
+                        }
+                        stage('Run Benchmark') {
+                            when {
+                                expression { params.RUN_BENCHMARK == true}
+                            }
+                            options { skipDefaultCheckout() }
+                            environment {
+                                LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/opt/intel/ipp/lib/intel64:/opt/intel/mkl/lib/intel64:/opt/intel/lib/intel64"
+                            }
+                            steps {
+                                sh 'echo $LD_LIBRARY_PATH'
+                                sh 'python3 build/install/bin/run_benchmark.py data_vicalib/t265 build/install/bin/vicalib'
+
+                                archiveArtifacts artifacts: "vicalib-benchmark-${BRANCH_NAME}-${GIT_COMMIT}.csv"
+                                archiveArtifacts artifacts: "vicalib-benchmark-summary-${BRANCH_NAME}-${GIT_COMMIT}.csv"
+
+                                copyArtifacts projectName: "SlamVicalib/master", filter: "vicalib-benchmark-summary-master-*", target: "base"
+                                sh 'icdiff --cols=450 base/vicalib-benchmark-summary-master-* vicalib-benchmark-summary-$BRANCH_NAME-$GIT_COMMIT.csv | aha | sed  s@base/@@g | tee vicalib-benchmark-changes-$BRANCH_NAME-$GIT_COMMIT.html'
+                                archiveArtifacts artifacts: "vicalib-benchmark-changes-${BRANCH_NAME}-${GIT_COMMIT}.html"
+                            }
+                        }
+
+                    }
+                    post {
+                        always {
+                            deleteDir()
+                        }
+                    }
+                }
+                stage('Windows 64') {
+                    agent { label 'windows' }
+                    stages {
+                        stage('Build') {
+                            when {
+                                expression { params.BUILD_WINDOWS == true}
+                            }
+                            environment {
+                                SSH_KEY = credentials('')
+                                GIT_SSH_COMMAND = "ssh -i ${env.SSH_KEY}".replaceAll('\\\\','/')
+                                CL = "-DWIN32" //For some reason WIN32 wasn't defined in some versions of msvc
+                                CTEST_OUTPUT_ON_FAILURE = 1
+                                CMAKE_INCLUDE_PATH = "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/include"
+                                CMAKE_LIBRARY_PATH = "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/lib/intel64"
+                                LIB  = "%LIB%;%CMAKE_LIBRARY_PATH%"
+                                INCLUDE  = "%INCLUDE%;C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/include"
+                            }
+                            steps {
+                                bat ([
+                                    'for /f "usebackq tokens=*" %%i in (`vswhere -latest -property installationPath`) do ("%%i/VC/Auxiliary/Build/vcvars64.bat" -vcvars_ver=14.0)',
+                                    'cmake -G Ninja -Bbuild64 -H. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_GUI=False',
+                                    'cmake --build build64 --config RelWithDebInfo',
+                                    ].join(' && '))
+                            }
+                        }
+                        stage('Run')
+                        {
+                            when {
+                                expression { params.WINDOWS_TEST == true}
+                            }
+                            options { skipDefaultCheckout() }
+                            steps {
+                                bat ([ 'python build64/install/bin/run_benchmark.py /data_vicalib/t265 build64/install/bin/vicalib.exe',
+                                       "move /y vicalib-benchmark-${BRANCH_NAME}-${GIT_COMMIT}.csv vicalib-benchmark-windows-${BRANCH_NAME}-${GIT_COMMIT}.csv",
+                                       "move /y vicalib-benchmark-summary-${BRANCH_NAME}-${GIT_COMMIT}.csv vicalib-benchmark-windows-summary-${BRANCH_NAME}-${GIT_COMMIT}.csv",
+                                ].join(' && '))
+
+                                archiveArtifacts artifacts: "vicalib-benchmark-windows-${BRANCH_NAME}-${GIT_COMMIT}.csv"
+                                archiveArtifacts artifacts: "vicalib-benchmark-windows-summary-${BRANCH_NAME}-${GIT_COMMIT}.csv"
+                            }
+                        }
+                        stage('Make Windows 64 Release')
+                        {
+                            when {
+                                expression { params.MAKE_WINDOWS_RELEASE == true}
+                            }
+                            options { skipDefaultCheckout() }
+                            steps {
+                                bat ([ "cd build64/install",
+                                       "cmake -E tar \"cfv\" \"${WORKSPACE}/vicalib-${BRANCH_NAME}-${env.GIT_COMMIT.take(7)}-${BUILD_NUMBER}.zip\" --format=zip \"bin\" ",
+                                    ].join(' && '))
+                                archiveArtifacts artifacts: "vicalib-${BRANCH_NAME}-${env.GIT_COMMIT.take(7)}-${BUILD_NUMBER}.zip" , fingerprint: true
+                            }
+                        }
+                    }
+                    post {
+                         always {
+                                bat ([  "DEL /F /Q /S *.*"
+                                     ].join(' && '))
+                         }
+                    }
+                }
+            }
+        }
+    }
+}

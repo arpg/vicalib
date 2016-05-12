@@ -27,13 +27,15 @@ endif()
 option(BUILD_SHARED_LIBS "Build Shared Library" ON)
 
 set( CMAKE_CXX_FLAGS "-std=c++11 -Wall ${CMAKE_CXX_FLAGS}" )
-if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" AND NOT ANDROID)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 endif()
 
 string( TOLOWER ${PROJECT_NAME} LIBRARY_NAME )
 
-if (NOT ANDROID)
+option(BUILD_GUI "Build GUI" ON)
+
+if (NOT ANDROID AND BUILD_GUI)
   add_definitions(-DBUILD_GUI)
 else()
   add_definitions(-UBUILD_GUI)
@@ -41,19 +43,22 @@ endif()
 
 ################################################################################
 # Find required dependencies
+FIND_PACKAGE( tinyxml2 REQUIRED CONFIG)
 find_package( Calibu REQUIRED )
 find_package( Ceres REQUIRED )
-find_package( CVars REQUIRED )
-find_package( GFlags REQUIRED )
-find_package( GLog REQUIRED )
-find_package( HAL REQUIRED )
+find_package( gflags REQUIRED CONFIG)
+find_package( glog REQUIRED CONFIG)
+find_package( protobuf REQUIRED CONFIG)
+find_package( hal REQUIRED CONFIG)
 find_package( OpenCV REQUIRED COMPONENTS core)
 if(OpenCV_VERSION_MAJOR EQUAL 2)
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 elseif(OpenCV_VERSION_MAJOR EQUAL 3)
 find_package(OpenCV REQUIRED COMPONENTS core imgproc videoio)
 endif()
-find_package( Pangolin REQUIRED )
+if(NOT ANDROID AND BUILD_GUI)
+  find_package( Pangolin REQUIRED )
+endif()
 
 # Prefer OSX_MODIFIED_GLUT > FREEGLUT > GLUT
 if(FREEGLUT_FOUND AND NOT HAVE_MODIFIED_OSXGLUT)
@@ -66,25 +71,31 @@ elseif(GLUT_FOUND)
 endif()
 
 list(APPEND LINK_LIBS
-  ${HAL_LIBRARIES}
+  hal::hal
   ${Calibu_LIBRARIES}
   ${CERES_LIBRARIES}
-  ${CVars_LIBRARIES}
-  ${GFlags_LIBRARIES}
-  ${GLOG_LIBRARIES}
-  ${Pangolin_LIBRARIES}
+  gflags_shared
+  glog::glog
   ${OpenCV_LIBS}
   dl)
 
+if(NOT ANDROID AND BUILD_GUI)
+  list(APPEND LINK_LIBS
+      ${Pangolin_LIBRARIES}
+    )
+endif()
+
 list(APPEND PROJ_INCLUDE_DIRS
-  ${Pangolin_INCLUDE_DIRS}
-  ${HAL_INCLUDE_DIRS}
-  ${CERES_INCLUDE_DIRS}
   ${Calibu_INCLUDE_DIRS}
-  ${CVars_INCLUDE_DIRS}
-  ${GLOG_INCLUDE_DIRS}
-  ${GFlags_INCLUDE_DIR}
+  ${CERES_INCLUDE_DIRS}
+  ${rapidjson_INCLUDE_DIR}
   )
+
+if(NOT ANDROID AND BUILD_GUI)
+  list(APPEND LINK_LIBS
+      ${Pangolin_INCLUDE_DIRS}
+    )
+endif()
 
 
 # Basic includes / libraries
@@ -96,9 +107,14 @@ list( APPEND LIB_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
 set(SRC_PREFIX src)
 set(VICALIB_SRCS
     ${SRC_PREFIX}/vicalib-engine.cc
-    ${SRC_PREFIX}/main.cc
     ${SRC_PREFIX}/vicalib-task.cc
 )
+
+if(NOT ANDROID)
+  list(APPEND VICALIB_SRCS ${SRC_PREFIX}/main.cc)
+else()
+  list(APPEND VICALIB_SRCS ${SRC_PREFIX}/libmain.cc)
+endif()
 
 set(VICALIB_CONDITIONS
   Calibu_FOUND
@@ -112,6 +128,8 @@ set(VICALIB_CONDITIONS
 
 list( APPEND ${PROJ_INCLUDE_DIRS} ${LIB_INC_DIR} )
 
+link_directories(${HAL_LIBRARY_DIRS})
+
 include_directories( ${USER_INC}
     ${PROJ_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}/include
@@ -119,14 +137,83 @@ include_directories( ${USER_INC}
     ${CMAKE_SOURCE_DIR}/include
     )
 
-add_executable( vicalib ${VICALIB_SRCS} )
+link_directories(
+  ${Calibu_LIBRARY_DIRS}
+  ${HAL_LIBRARY_DIRS}
+  ${CVars_LIBRARY_DIRS}
+  ${Pangolin_LIBRARY_DIRS}
+)
+
+IF(WIN32)
+    set_property(SOURCE ${SRC_PREFIX}/vicalib-task.cc APPEND_STRING PROPERTY COMPILE_FLAGS " /bigobj ")
+ENDIF()
+if(NOT ANDROID)
+  add_executable( vicalib ${VICALIB_SRCS} )
+else()
+  add_library( vicalib SHARED ${VICALIB_SRCS} )
+  set_target_properties(vicalib PROPERTIES LINK_FLAGS " -Wl,--build-id ")
+endif()
 target_link_libraries( vicalib ${LINK_LIBS} )
 
-add_executable( tracker src/tracker.cc )
-target_link_libraries( tracker ${LINK_LIBS} )
 
-install(TARGETS vicalib RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
-install(TARGETS tracker RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+target_include_directories (vicalib BEFORE PUBLIC
+  "$<INSTALL_INTERFACE:include>"
+  )
+
+#add_executable( tracker src/tracker.cc )
+#target_link_libraries( tracker ${LINK_LIBS} )
+
+include (CMakePackageConfigHelpers)
+
+install(TARGETS vicalib
+  EXPORT vicalib-targets
+  RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+  LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+  PUBLIC_HEADER DESTINATION include/vicalib
+  )
+#install(TARGETS tracker RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+
+
+set(LOAD_DEPENDENCY "#find_dependency( protobuf )
+#find_dependency( gflags )
+find_dependency( glog )
+#find_dependency( tinyxml2 )
+find_dependency( hal )
+find_dependency( OpenCV )
+find_dependency( Calibu )
+find_dependency( Ceres )")
+
+configure_package_config_file (vicalib-config.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/vicalib-config.cmake
+  INSTALL_DESTINATION lib/cmake/vicalib
+  NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+
+write_basic_package_version_file (vicalib-config-version.cmake VERSION
+  ${VICALIB_VERSION} COMPATIBILITY SameMajorVersion)
+
+export (TARGETS vicalib NAMESPACE vicalib:: FILE vicalib-targets.cmake)
+export (PACKAGE vicalib)
+
+install (FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/vicalib-config.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/vicalib-config-version.cmake
+  DESTINATION lib/cmake/vicalib)
+
+install (EXPORT vicalib-targets NAMESPACE vicalib:: DESTINATION lib/cmake/vicalib)
+
+
+install( FILES ${CMAKE_SOURCE_DIR}/include/vicalib/vicalib_interface.h
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/vicalib )
+
+if(UNIX)
+    install (PROGRAMS scripts/run_imu_calibration.sh DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+endif()
+install (PROGRAMS scripts/run_vicalib.py DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+install (PROGRAMS scripts/run_benchmark.py DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+install (PROGRAMS scripts/run_vicalib_evaluation.py DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+
+install (FILES data/t26x-initialization.json DESTINATION ${CMAKE_INSTALL_PREFIX}/data)
 
 include(${CMAKE_MODULE_PATH}/cmake_uninstall.cmake.in)
 add_custom_target(uninstall

@@ -1,0 +1,122 @@
+diff --git a/include/dirent.h b/include/dirent.h
+index ad9d2b3..06be39f 100644
+--- a/include/dirent.h
++++ b/include/dirent.h
+@@ -17,6 +17,8 @@
+ #ifndef WIN32_LEAN_AND_MEAN
+ #   define WIN32_LEAN_AND_MEAN
+ #endif
++#define NOGDI
++#define NOMINMAX
+ #include <windows.h>
+ 
+ #include <stdio.h>
+@@ -922,6 +924,108 @@ dirent_set_errno(
+ }
+ 
+ 
++// From https://chromium.googlesource.com/native_client/nacl-newlib/+/old/master/newlib/libc/posix/scandir.c BSD Code
++#define	MAXNAMLEN	255  // <- line from http://unix.superglobalmegacorp.com/BSD4.4/newsrc/sys/dirent.h.html
++
++#define DIRSIZ(dp) \
++    ((sizeof (struct dirent) - (MAXNAMLEN+1)) + ((strlen((dp)->d_name)+1 + 3) &~ 3))
++
++static int scandir(
++    const char *dirname ,
++    struct dirent ***namelist ,
++    int (*select)(const struct dirent *) ,
++    int (*dcomp)(const struct dirent **, const struct dirent **))
++{
++    register struct dirent *d, *p, **names;
++    register size_t nitems;
++    struct stat stb = { 0 };
++    long arraysz = 0;
++    DIR *dirp = NULL;
++    int successful = 0;
++    int rc = 0;
++    dirp = NULL;
++    names = NULL;
++    if ((dirp = opendir(dirname)) == NULL)
++        return(-1);
++#ifdef HAVE_DD_LOCK
++    __lock_acquire_recursive(dirp->dd_lock);
++#endif
++    if (stat(dirname, &stb) < 0)
++        goto cleanup;
++    /*
++     * If there were no directory entries, then bail.
++     */
++    if (stb.st_size == 0)
++        goto cleanup;
++    /*
++     * estimate the array size by taking the size of the directory file
++     * and dividing it by a multiple of the minimum size entry.
++     */
++    arraysz = (stb.st_size / 24);
++    names = (struct dirent **)malloc(arraysz * sizeof(struct dirent *));
++    if (names == NULL)
++        goto cleanup;
++    nitems = 0;
++    while ((d = readdir(dirp)) != NULL) {
++        if (select != NULL && !(*select)(d))
++            continue;   /* just selected names */
++        /*
++         * Make a minimum size copy of the data
++         */
++        p = (struct dirent *)malloc(DIRSIZ(d));
++        if (p == NULL)
++            goto cleanup;
++        p->d_ino = d->d_ino;
++        p->d_reclen = d->d_reclen;
++        strcpy(p->d_name, d->d_name);
++        /*
++         * Check to make sure the array has space left and
++         * realloc the maximum size.
++         */
++        if (++nitems >= arraysz) {
++            if (stat(dirname, &stb) < 0)
++                goto cleanup;
++            arraysz = stb.st_size / 12;
++            names = (struct dirent **)realloc((char *)names,
++                arraysz * sizeof(struct dirent *));
++            if (names == NULL)
++                goto cleanup;
++        }
++        names[nitems-1] = p;
++    }
++    successful = 1;
++cleanup:
++    closedir(dirp);
++    if (successful) {
++        if (nitems && dcomp != NULL)
++            qsort(names, nitems, sizeof(struct dirent *), (int(*)(const void *, const void *))dcomp);
++        *namelist = names;
++        rc = nitems;
++    } else {  /* We were unsuccessful, clean up storage and return -1.  */
++        if ( names ) {
++            int i;
++            for (i=0; i < nitems; i++ )
++                free( names[i] );
++            free( names );
++        }
++        rc = -1;
++    }
++#ifdef HAVE_DD_LOCK
++    __lock_release_recursive(dirp->dd_lock);
++#endif
++    return(rc);
++}
++/*
++ * Alphabetic order comparison routine for those who want it.
++ */
++static int alphasort(
++       const struct dirent **d1 ,
++       const struct dirent **d2)
++{
++       return(strcmp((*d1)->d_name, (*d2)->d_name));
++}
++
++
+ #ifdef __cplusplus
+ }
+ #endif
