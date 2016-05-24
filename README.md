@@ -3,9 +3,9 @@ vicalib
 
 Vicalib is a calibration tool for visual or visual-inertial sensor systems. The system is able to calibrate camera intrinsics for pinhole, polynomial and r-theta camera models, as well as the camera-to-imu extrinsics, imu biases and scale factors for visual inertial system. Dependencies are as follows:
 
-Installation
+Dependencies
 ============
-See the installation documentation at: https://github.com/arpg/Documentation/tree/master/Installation. Build all packages up to HAL, and then build this package.
+See the documentation at: https://github.com/arpg/Documentation/tree/master/Installation. Build all packages up to HAL, and then build this package.
 
 Building
 ========
