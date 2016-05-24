@@ -3,17 +3,9 @@ vicalib
 
 Vicalib is a calibration tool for visual or visual-inertial sensor systems. The system is able to calibrate camera intrinsics for pinhole, polynomial and r-theta camera models, as well as the camera-to-imu extrinsics, imu biases and scale factors for visual inertial system. Dependencies are as follows:
 
-Dependencies
+Installation
 ============
-
-- Calibu (https://github.com/arpg/calibu): Camera calibration library. The dependency is used for target generation, detection and tracking.
-- HAL (https://github.com/arpg/hal): Hardware Abstraction Layer. The dependency includes drivers to read camera and IMU information from files or devices.
-- Pangolin (https://github.com/arpg/Pangolin) forked from (https://github.com/stevenlovegrove/Pangolin): OpenGL GUI and utility library
-- Ceres Solver (http://ceres-solver.org/): Non-linear solver used to estimate the calibration parameters
-- CVARS (https://github.com/arpg/GLConsole): GUI interface to variables to control program operation
-- GFlags (https://code.google.com/p/gflags/): Google command line flag library
-- GLog (https://code.google.com/p/google-glog/): Google logging library
-- OpenCV (http://opencv.org/): Computer vision utility library
+See the installation documentation at: https://github.com/arpg/Documentation/tree/master/Installation. Build all packages up to HAL, and then build this package.
 
 Building
 ========
