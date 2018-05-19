@@ -859,13 +859,16 @@ class ViCalibrator : public ceres::IterationCallback {
   void RemoveOutliers()
   {
     std::vector<std::vector<ceres::ResidualBlockId>> outliers;
+    std::vector<std::vector<ceres::ResidualBlockId>> inliers;
     outliers.resize(cameras_.size());
+    inliers.resize(cameras_.size());
 
     // search for outliers in each camera stream
     for (size_t ii = 0; ii < cameras_.size(); ++ii) {
 
       const double stdev = camera_proj_rmse_[ii];
       const double threshold = FLAGS_outlier_threshold * stdev;
+      inliers.reserve(projection_residuals_[ii].size());
 
       ceres::Problem::EvaluateOptions options;
       options.residual_blocks = projection_residuals_[ii];
@@ -888,6 +891,10 @@ class ViCalibrator : public ceres::IterationCallback {
         {
           outliers[ii].push_back(projection_residuals_[ii][kk]);
         }
+        else
+        {
+          inliers[ii].push_back(projection_residuals_[ii][kk]);
+        }
       }
     }
 
@@ -902,15 +909,9 @@ class ViCalibrator : public ceres::IterationCallback {
       for (size_t kk = 0; kk < outliers[ii].size(); ++kk)
       {
         problem_->RemoveResidualBlock(outliers[ii][kk]);
-
-        auto remomve_iter = std::remove(
-            projection_residuals_[ii].begin(),
-            projection_residuals_[ii].end(),
-            outliers[ii][kk]);
-
-        projection_residuals_[ii].erase(remomve_iter,
-            projection_residuals_[ii].end());
       }
+
+      projection_residuals_ = inliers;
     }
   }
 
