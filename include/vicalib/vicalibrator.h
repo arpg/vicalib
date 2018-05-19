@@ -54,8 +54,10 @@
 #include <vicalib/ceres-cost-functions.h>
 
 DECLARE_string(output_log_file);
-DECLARE_bool(calibrate_imu);  // Defined in vicalib-engine.cc
-DECLARE_int32(max_iters);     // Defined in vicalib-engine.cc
+DECLARE_bool(calibrate_imu);     // Defined in vicalib-engine.cc
+DECLARE_int32(max_iters);        // Defined in vicalib-engine.cc
+DECLARE_bool(remove_outliers);   // Defined in vicalib-engine.cc
+DECLARE_double(outlier_threshold); // Defined in vicalib-engine.cc
 
 namespace visual_inertial_calibration {
 
@@ -442,7 +444,7 @@ class ViCalibrator : public ceres::IterationCallback {
               calibu::KannalaBrandtCamera<double>::NumParams>(
               new ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>(p_w, p_c));
 
-	} else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
+  } else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
           ImuReprojectionCostFunctor<calibu::LinearCamera<double>>, 2,
           Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
