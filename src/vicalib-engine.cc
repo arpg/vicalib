@@ -197,7 +197,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       if (type == "fov") {
         Eigen::Vector2i size_;
-        Eigen::VectorXd params_(calibu::FovCamera<double>::NumParams);
+        Eigen::VectorXd params_(5);
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.2;
         std::shared_ptr<calibu::CameraInterface<double>>
@@ -207,7 +207,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       } else if (type == "poly2") {
         Eigen::Vector2i size_;
-        Eigen::VectorXd params_(calibu::Poly2Camera<double>::NumParams);
+        Eigen::VectorXd params_(6);
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0;
         std::shared_ptr<calibu::CameraInterface<double>>
@@ -217,7 +217,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       } else if (type == "poly3" || type =="poly") {
         Eigen::Vector2i size_;
-        Eigen::VectorXd params_(calibu::Poly3Camera<double>::NumParams);
+        Eigen::VectorXd params_(7);
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0;
         std::shared_ptr<calibu::CameraInterface<double>>
@@ -227,7 +227,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       } else if (type == "rational6" || type == "rational") {
 		Eigen::Vector2i size_;
-		Eigen::VectorXd params_(calibu::Rational6Camera<double>::NumParams);
+		Eigen::VectorXd params_(10);
 		size_ << w, h;
 		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 		std::shared_ptr<calibu::CameraInterface<double>>
@@ -237,7 +237,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       } else if (type == "kb4") {
 		Eigen::Vector2i size_;
-		Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+		Eigen::VectorXd params_(8);
 		size_ << w, h;
 		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
 		std::shared_ptr<calibu::CameraInterface<double>>
@@ -247,7 +247,7 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
 
       } else if (type == "linear") {
         Eigen::Vector2i size_;
-        Eigen::VectorXd params_(calibu::LinearCamera<double>::NumParams);
+        Eigen::VectorXd params_(4);
         size_ << w, h;
         params_ << 300, 300, w/2.0, h/2.0;
         std::shared_ptr<calibu::CameraInterface<double>>
