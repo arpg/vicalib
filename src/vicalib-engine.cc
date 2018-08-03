@@ -97,6 +97,11 @@ DEFINE_double(gyro_sigma, IMU_GYRO_SIGMA,
               "Sigma of gyroscope measurements.");
 DEFINE_double(accel_sigma, IMU_ACCEL_SIGMA,
               "Sigma of accel measurements.");
+DEFINE_bool(remove_outliers, false,
+              "Re-run estimation after removing conic outliers");
+DEFINE_double(outlier_threshold, 2.0,
+              "Minimum standard-deviations of reprojection error for conic "
+              "outlier classification");
 
 namespace visual_inertial_calibration {
 
@@ -185,11 +190,11 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     for (size_t i = 0; i < model_files.size(); ++i) {
       std::shared_ptr<calibu::Rigd> rig = calibu::ReadXmlRig(model_files[i]);
       input_cameras.emplace_back( rig->cameras_[0], Sophus::SE3d());
-      LOG(INFO) << "Initalizing with user provided model file: " 
+      LOG(INFO) << "Initalizing with user provided model file: "
         <<  model_files[i] << "\n" ;
     }
   }
-  else{ 
+  else{
     for (size_t i = 0; i < model_strings.size(); ++i) {
       const std::string& type = model_strings[i];
       int w = camera_->Width(i);
@@ -226,24 +231,24 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "rational6" || type == "rational") {
-		Eigen::Vector2i size_;
-		Eigen::VectorXd params_(10);
-		size_ << w, h;
-		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-		std::shared_ptr<calibu::CameraInterface<double>>
-		starting_cam(new calibu::Rational6Camera<double>(params_, size_));
-		starting_cam->SetType("calibu_fu_fv_u0_v0_rational6");
-		input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+    Eigen::Vector2i size_;
+    Eigen::VectorXd params_(calibu::Rational6Camera<double>::NumParams);
+    size_ << w, h;
+    params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+    std::shared_ptr<calibu::CameraInterface<double>>
+    starting_cam(new calibu::Rational6Camera<double>(params_, size_));
+    starting_cam->SetType("calibu_fu_fv_u0_v0_rational6");
+    input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "kb4") {
-		Eigen::Vector2i size_;
-		Eigen::VectorXd params_(8);
-		size_ << w, h;
-		params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
-		std::shared_ptr<calibu::CameraInterface<double>>
-		  starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
-		starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
-		input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+    Eigen::Vector2i size_;
+    Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+    size_ << w, h;
+    params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+    std::shared_ptr<calibu::CameraInterface<double>>
+      starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
+    starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
+    input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "linear") {
         Eigen::Vector2i size_;
@@ -410,7 +415,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
         for( size_t ii = 0; ii < vicalib_->GetCalibrator().NumFrames(); ii++ ){
           Eigen::Matrix4d t_wk =
             vicalib_->GetCalibrator().GetFrame(ii)->t_wp_.matrix();
-          file << t_wk.row(0) << "     " << t_wk.row(1) 
+          file << t_wk.row(0) << "     " << t_wk.row(1)
             << "     " << t_wk.row(2) << std::endl;
         }
         file.close();
@@ -419,7 +424,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
       finished = true;
       if (FLAGS_exit_vicalib_on_finish) {
         exit(0);
-      } 
+      }
     }
     Draw(vicalib_);
 

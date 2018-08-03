@@ -54,8 +54,10 @@
 #include <vicalib/ceres-cost-functions.h>
 
 DECLARE_string(output_log_file);
-DECLARE_bool(calibrate_imu);  // Defined in vicalib-engine.cc
-DECLARE_int32(max_iters);     // Defined in vicalib-engine.cc
+DECLARE_bool(calibrate_imu);     // Defined in vicalib-engine.cc
+DECLARE_int32(max_iters);        // Defined in vicalib-engine.cc
+DECLARE_bool(remove_outliers);   // Defined in vicalib-engine.cc
+DECLARE_double(outlier_threshold); // Defined in vicalib-engine.cc
 
 namespace visual_inertial_calibration {
 
@@ -243,6 +245,7 @@ class ViCalibrator : public ceres::IterationCallback {
     optimize_rotation_only_ = true;
     is_finished_ = false;
     is_gravity_initialized_ = false;
+    outliers_removed_ = false;
   }
 
   // Externally adjust which parts of the optimization are active.
@@ -442,7 +445,7 @@ class ViCalibrator : public ceres::IterationCallback {
               calibu::KannalaBrandtCamera<double>::NumParams>(
               new ImuReprojectionCostFunctor<calibu::KannalaBrandtCamera<double>>(p_w, p_c));
 
-	} else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
+  } else if (dynamic_cast<calibu::LinearCamera<double>*>( interface.get())) {
       cost->Cost() = new ceres::AutoDiffCostFunction<
           ImuReprojectionCostFunctor<calibu::LinearCamera<double>>, 2,
           Sophus::SE3d::num_parameters, Sophus::SO3d::num_parameters, 3,
@@ -853,6 +856,65 @@ class ViCalibrator : public ceres::IterationCallback {
     return covariance_mat;
   }
 
+  void RemoveOutliers()
+  {
+    std::vector<std::vector<ceres::ResidualBlockId>> outliers;
+    std::vector<std::vector<ceres::ResidualBlockId>> inliers;
+    outliers.resize(cameras_.size());
+    inliers.resize(cameras_.size());
+
+    // search for outliers in each camera stream
+    for (size_t ii = 0; ii < cameras_.size(); ++ii) {
+
+      const double stdev = camera_proj_rmse_[ii];
+      const double threshold = FLAGS_outlier_threshold * stdev;
+      inliers.reserve(projection_residuals_[ii].size());
+
+      ceres::Problem::EvaluateOptions options;
+      options.residual_blocks = projection_residuals_[ii];
+      options.apply_loss_function = false;
+      std::vector<double> residuals;
+
+      // compute reprojection errors
+      problem_->Evaluate(options, nullptr, &residuals, nullptr,
+          nullptr);
+
+      // check each reprojection error
+      for (size_t kk = 0; kk < projection_residuals_[ii].size(); ++kk)
+      {
+        const double x = residuals[2 * kk + 0];
+        const double y = residuals[2 * kk + 1];
+        const double error = sqrt(x * x + y * y);
+
+        // check of reproject error exceeds threshold
+        if (error > threshold)
+        {
+          outliers[ii].push_back(projection_residuals_[ii][kk]);
+        }
+        else
+        {
+          inliers[ii].push_back(projection_residuals_[ii][kk]);
+        }
+      }
+    }
+
+    // remove outlier residuals blocks for each camera
+    for (size_t ii = 0; ii < outliers.size(); ++ii)
+    {
+      LOG(INFO) << "Removing " << outliers[ii].size() << "/" <<
+          projection_residuals_[ii].size() << " conics outliers " <<
+          "from camera " << ii << "...";
+
+      // remove each outlier residual block
+      for (size_t kk = 0; kk < outliers[ii].size(); ++kk)
+      {
+        problem_->RemoveResidualBlock(outliers[ii][kk]);
+      }
+
+      projection_residuals_ = inliers;
+    }
+  }
+
   // Runs the optimization in a background thread.
   void SolveThread() {
     is_running_ = true;
@@ -930,6 +992,10 @@ class ViCalibrator : public ceres::IterationCallback {
               is_scale_factor_active_ = true;
               LOG(INFO) << "Activating scale factor terms... " << std::endl;
               problem_->SetParameterBlockVariable(scale_factors_.data());
+            } else if (FLAGS_remove_outliers && !outliers_removed_) {
+              LOG(INFO) << "Removing conic outliers...";
+              RemoveOutliers();
+              outliers_removed_ = true;
             } else {
               LOG(INFO) << "Optimization Finished... " << std::endl;
               PrintResults();
@@ -955,7 +1021,13 @@ class ViCalibrator : public ceres::IterationCallback {
             LOG(INFO) << "ts= " << imu_.time_offset_ << std::endl;
             break;
           } else if (summary.termination_type != ceres::NO_CONVERGENCE) {
-            is_finished_ = true;
+            if (FLAGS_remove_outliers && !outliers_removed_) {
+              LOG(INFO) << "Removing conic outliers...";
+              RemoveOutliers();
+              outliers_removed_ = true;
+            } else {
+              is_finished_ = true;
+            }
           }
         }
         catch (const std::exception& e) {
@@ -1010,6 +1082,7 @@ class ViCalibrator : public ceres::IterationCallback {
   bool is_gravity_initialized_;
   double mse_;
   bool optimize_time_offset_;
+  bool outliers_removed_;
 };
 }  // namespace visual_inertial_calibration
 #endif  // VISUAL_INERTIAL_CALIBRATION_VICALIBRATOR_H_
