@@ -213,9 +213,7 @@ class ViCalibrator : public ceres::IterationCallback {
       // the robotics (imu) to vision coordinate transform d
       if (FLAGS_calibrate_imu) {
         cameras_[c]->camera->SetRDF(calibu::RdfRobotics.matrix());
-        cameras_[c]->camera->SetPose(cameras_[c]->T_ck.inverse() *
-                    Sophus::SE3d(calibu::RdfRobotics.inverse(),
-                                 Eigen::Vector3d::Zero()));
+        cameras_[c]->camera->SetPose(cameras_[c]->T_ck.inverse());
         rig->AddCamera(cameras_[c]->camera);
       } else {
         // The RDF must be set to identity (computer vision).
