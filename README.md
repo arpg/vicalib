@@ -87,7 +87,7 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
 
   Once you have a good intrinsics calibration for all of your cameras you can move on to the extrinsics calibration. As before, you want to take a calibration log using SensorViewer except this time you want to log all cameras and the IMU in a single log file. Once you have a log file you can run the extrinsic calibration in vicalib wtih the following command:
 
-  - ./vicalib -grid_preset medium -remove_outliers=true -model_files <list of .xml files for each of your extrinsic calibrations (comma separated)> -calibrate_intrinsics=false -calibrate_imu=true -cam log://<path to extrinsics calibration log file> -imu log://<path to extrinsics calibration log file> -alsologtostderr
+  - ./vicalib -grid_preset medium -remove_outliers=true -model_files <list of .xml files for each of your extrinsic calibrations (comma separated)> -calibrate_intrinsics=false -calibrate_imu=true -cam log://<path_to_extrinsics_log_file> -imu log://<path_to_extrinsics_log_file> -alsologtostderr
 
   In the above command we are telling vicalib that it should not try to calibrate the cameras' intrinsics because we're giving it a good intrinsic calibration for each camera in the -model_files flag. So vicalib will use our previous intrinsic calibrations, which we already know are good, and it will only calibrate the camera-to-imu extrinsics for each camera. As with the intrinsic calibration, you may have to try this several times before you get a good extrinsics calibration. For our purposes a good extrinsics calibration has an RMS reprojection error of 0.3 or less. 
 
