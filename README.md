@@ -81,7 +81,7 @@ vicalib [-models <cam_models>] [-cam <camera_uri>] [-imu <imu_uri] [-options]
 
   First, take a calibration log for each camera's intrinsics separately using SensorViewer. Then run the intrinsic calibration in vicalib with the following command:
 
-   - ./vicalib -grid_preset medium -remove_outliers=true -models <camera model> -cam log://<path_to_intrinsics_log_file> -alsologtostderr
+   - ./vicalib -grid_preset medium -remove_outliers=true -models <camera_model> -cam log://<path_to_intrinsics_log_file> -alsologtostderr
 
   Run the above command for each camera in your system individually. You may need to try this with several log files before you get a good intrinsics calibration. For our purposes a good calibration is one with RMS reprojection error of less than 0.04. Once you have obtained a good intrinsics calibration be sure to rename the resultant "cameras.xml" file because vicalib will overwrite cameras.xml the next time vicalib is run if it is not renamed. 
 
