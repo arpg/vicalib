@@ -2,7 +2,7 @@ set(EP_REQUIRED_PROJECTS POSIX_shim protobuf GLog GFlags OpenCV Sophus tinyxml2 
 if(WIN32)
     list(APPEND EP_REQUIRED_PROJECTS dirent dlfcn-win32)
 ENDIF()
-set(EP_URL "git@github.com:dmirota/HAL.git")
+set(EP_URL "https://github.com/dmirota/HAL.git")
 
 set(EP_TAG master)
 

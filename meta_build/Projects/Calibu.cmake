@@ -1,5 +1,5 @@
 set(EP_REQUIRED_PROJECTS Eigen GLog GFlags Ceres OpenCV Sophus tinyxml2)
-set(EP_URL "git@github.com:dmirota/Calibu.git")
+set(EP_URL "https://github.com/dmirota/Calibu.git")
 
 
 #set(EP_PATCH "${CMAKE_CURRENT_LIST_DIR}/${EP_NAME}.patch")

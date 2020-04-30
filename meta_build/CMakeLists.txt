@@ -14,13 +14,13 @@ SET(CMakeAll_VERIFY_URLS OFF CACHE BOOL "" FORCE)
 SET(CMakeAll_RESOLVE_DEPENDENCIES ON CACHE BOOL "" FORCE)
 
 if(UNIX)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -DEIGEN_USE_MKL_ALL")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -DEIGEN_USE_MKL_ALL")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -DEIGEN_USE_MKL_ALL -I$ENV{MKL_INCLUDE_PATH}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -DEIGEN_USE_MKL_ALL -I$ENV{MKL_INCLUDE_PATH}")
 endif()
 
 if(WIN32)
-  set(MKL_C_FLAGS "${CMAKE_C_FLAGS} -DEIGEN_USE_MKL_ALL" CACHE PATH "" FORCE)
-  set(MKL_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_USE_MKL_ALL" CACHE PATH "" FORCE)
+  set(MKL_C_FLAGS "${CMAKE_C_FLAGS} -DEIGEN_USE_MKL_ALL -I$ENV{MKL_INCLUDE_PATH}" CACHE PATH "" FORCE)
+  set(MKL_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_USE_MKL_ALL -I$ENV{MKL_INCLUDE_PATH}" CACHE PATH "" FORCE)
 endif()
 
 add_compile_options(-march=atom)
@@ -41,19 +41,19 @@ else()
 endif()
 
 if(UNIX)
-  set(BLAS_LIBRARIES "/opt/intel/mkl/lib/intel64/libmkl_intel_lp64.a")
-  list(APPEND BLAS_LIBRARIES "/opt/intel/mkl/lib/intel64/libmkl_core.a"
-                             "/opt/intel/mkl/lib/intel64/libmkl_sequential.a")
-                             #"/opt/intel/mkl/lib/intel64/libmkl_avx.a")
+  set(BLAS_LIBRARIES "$ENV{MKL_LIBRARY_PATH}/libmkl_intel_lp64.a")
+  list(APPEND BLAS_LIBRARIES "$ENV{MKL_LIBRARY_PATH}/libmkl_core.a"
+                             "$ENV{MKL_LIBRARY_PATH}/libmkl_sequential.a")
+                             #"$ENV{MKL_LIBRARY_PATH}/libmkl_avx.a")
   set(BLAS_LIBRARIES ${BLAS_LIBRARIES} ${BLAS_LIBRARIES} ${BLAS_LIBRARIES})
-  set(LAPACK_INCLUDE_DIR "/opt/intel/mkl/include")
+  set(LAPACK_INCLUDE_DIR "$ENV{MKL_INCLUDE_PATH}")
 endif()
 
 if(WIN32)
-  set(BLAS_LIBRARIES "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/lib/intel64/mkl_core.lib")
-  list(APPEND BLAS_LIBRARIES "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/lib/intel64/mkl_intel_lp64.lib"
-                             "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/lib/intel64/mkl_sequential.lib")
-  set(LAPACK_INCLUDE_DIR "C:/Program Files (x86)/IntelSWTools/compilers_and_libraries/windows/mkl/include")
+  set(BLAS_LIBRARIES "$ENV{MKL_LIBRARY_PATH}/mkl_core.lib")
+  list(APPEND BLAS_LIBRARIES "$ENV{MKL_LIBRARY_PATH}/mkl_intel_lp64.lib"
+                             "$ENV{MKL_LIBRARY_PATH}/mkl_sequential.lib")
+  set(LAPACK_INCLUDE_DIR "$ENV{MKL_INCLUDE_PATH}")
 endif()
 
 
