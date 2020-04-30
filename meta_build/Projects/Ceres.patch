@@ -1,0 +1,33 @@
+diff --git a/internal/ceres/lapack.cc b/internal/ceres/lapack.cc
+index 97e4edd..592d61b 100644
+--- a/internal/ceres/lapack.cc
++++ b/internal/ceres/lapack.cc
+@@ -31,12 +31,13 @@
+ #include "ceres/lapack.h"
+ 
+ #include "ceres/internal/port.h"
+ #include "ceres/linear_solver.h"
+ #include "glog/logging.h"
+ 
++#ifndef EIGEN_USE_MKL_ALL
+ // C interface to the LAPACK Cholesky factorization and triangular solve.
+ extern "C" void dpotrf_(char* uplo,
+                        int* n,
+                        double* a,
+                        int* lda,
+                        int* info);
+@@ -58,13 +59,13 @@
+                        int* lda,
+                        double* b,
+                        int* ldb,
+                        double* work,
+                        int* lwork,
+                        int* info);
+-
++#endif
+ 
+ namespace ceres {
+ namespace internal {
+ 
+ LinearSolverTerminationType LAPACK::SolveInPlaceUsingCholesky(
+     int num_rows,

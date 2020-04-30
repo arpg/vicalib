@@ -26,7 +26,7 @@
 // #define COMPUTE_VICALIB_COVARIANCE
 
 #include <memory>
-#include <pthread.h>
+#include <thread>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -53,11 +53,53 @@
 #include <vicalib/interpolation-buffer.h>
 #include <vicalib/ceres-cost-functions.h>
 
+#include <rapidjson/document.h>
+#include <rapidjson/prettywriter.h>
+#include <rapidjson/ostreamwrapper.h>
+
+
+// \todo(dmirota)  Should have a better way to avoid copying code from the tracker
+
+#include <vicalib/calibration_keys.h>
+
+#define f_t double
+
+typedef Eigen::Quaternion<f_t> quaternion;
+
+typedef Eigen::Matrix<f_t, 3, 1> v3;
+
+typedef v3 rotation_vector;
+
+static inline f_t sinc(f_t x, f_t x2) {
+    return x2 < std::sqrt(f_t(120) * std::numeric_limits<f_t>::epsilon()) ? f_t(1) - f_t(1) / f_t(6) * x2 : std::sin(x) / x;
+}
+
+static inline quaternion to_quaternion(const rotation_vector &v) {
+    rotation_vector w(v / 2);
+    f_t th2, th = sqrt(th2 = w.squaredNorm()), C = cos(th), Sc = sinc(th, th2);
+    return quaternion(C, Sc * w.x(), Sc * w.y(), Sc * w.z()); // e^(v/2)
+}
+
+static inline f_t atan2c(f_t s, f_t c, f_t s2) {
+    return s2 < std::sqrt(f_t(40) / f_t(3) * std::numeric_limits<f_t>::epsilon()) && c > 0 ? f_t(1) + f_t(1) / f_t(6) * s2 : std::atan2(s, c) / s;
+}
+
+static inline rotation_vector to_rotation_vector(const quaternion &q_) {
+    quaternion q = q_; if (q.w() < 0) q *= quaternion(-1, 0, 0, 0); // return [0,pi] instead of [0,2pi]
+    f_t S2, S = sqrt(S2 = q.vec().squaredNorm()), C = q.w();
+    f_t scale = 2 * atan2c(S, C, S2); // robust version of 2 asin(S)/S
+    return rotation_vector(scale * q.vec()); // 2 log(q)
+}
+
 DECLARE_string(output_log_file);
 DECLARE_bool(calibrate_imu);     // Defined in vicalib-engine.cc
 DECLARE_int32(max_iters);        // Defined in vicalib-engine.cc
 DECLARE_bool(remove_outliers);   // Defined in vicalib-engine.cc
 DECLARE_double(outlier_threshold); // Defined in vicalib-engine.cc
+DECLARE_bool(calibrate_imu_extrinsics_only);  // Defined in vicalib-engine.cc
+DECLARE_bool(evaluate_only);  // Defined in vicalib-engine.cc
+DECLARE_string(device_serial);  // Defined in vicalib-engine.cc
+
 
 namespace visual_inertial_calibration {
 
@@ -150,11 +192,12 @@ class ViCalibrator : public ceres::IterationCallback {
     solver_options_.callbacks.push_back(this);
     solver_options_.trust_region_strategy_type = ceres::DOGLEG;
     problem_.reset(new ceres::Problem(prob_options_));
+    reproj_error_file_.open(FLAGS_log_dir + "/reprojection_error.csv");
 
     Clear();
   }
 
-  virtual ~ViCalibrator() {}
+  virtual ~ViCalibrator() { reproj_error_file_.close(); }
 
   // Return the root mean squared error of the camera reprojections.
   std::vector<double> GetCameraProjRMSE() const { return camera_proj_rmse_; }
@@ -211,13 +254,13 @@ class ViCalibrator : public ceres::IterationCallback {
     for (size_t c = 0; c < cameras_.size(); ++c) {
       // Rdfrobotics.inverse is multiplied so that T_ck does not bake
       // the robotics (imu) to vision coordinate transform d
-      if (FLAGS_calibrate_imu) {
+      /*if (FLAGS_calibrate_imu) {
         cameras_[c]->camera->SetRDF(calibu::RdfRobotics.matrix());
         cameras_[c]->camera->SetPose(cameras_[c]->T_ck.inverse() *
                     Sophus::SE3d(calibu::RdfRobotics.inverse(),
                                  Eigen::Vector3d::Zero()));
         rig->AddCamera(cameras_[c]->camera);
-      } else {
+      } else*/ {
         // The RDF must be set to identity (computer vision).
         cameras_[c]->camera->SetRDF(calibu::RdfVision.matrix());
         cameras_[c]->camera->SetPose(cameras_[c]->T_ck.inverse());
@@ -226,6 +269,194 @@ class ViCalibrator : public ceres::IterationCallback {
     }
 
     WriteXmlRig(filename, rig);
+  }
+
+  // include eeprom header
+
+  //add write eeprom
+
+
+  void rc_vector_to_json_array(const v3 & v, const char * key, rapidjson::Value & json, rapidjson::Document::AllocatorType& a)
+  {
+      rapidjson::Value json_value(rapidjson::kArrayType);
+      for (int i = 0; i < 3; i++) json_value.PushBack(v[i], a);
+      json.AddMember(rapidjson::StringRef(key), json_value, a); // assumes key will live long enough
+  }
+
+
+  void copy_extrinsics_to_json(const Sophus::SE3d & extrinsics, rapidjson::Value & json, rapidjson::Document::AllocatorType& a)
+  {
+      v3 W = to_rotation_vector(extrinsics.so3().unit_quaternion());
+      v3 T = extrinsics.translation();
+      rc_vector_to_json_array(T, KEY_EXTRINSICS_T, json, a);
+      //v3 var = { 9.999999974752427e-07, 9.999999974752427e-07, 9.999999974752427e-07 };
+      v3 var = { 10.0e-07, 10.0e-07, 10.0e-07 };
+      rc_vector_to_json_array(var, KEY_EXTRINSICS_T_VARIANCE, json, a);
+      rc_vector_to_json_array(W, KEY_EXTRINSICS_W, json, a);
+      rc_vector_to_json_array(var, KEY_EXTRINSICS_W_VARIANCE, json, a);
+  }
+
+
+  void copy_imu_to_json(rapidjson::Value & imus, rapidjson::Document::AllocatorType& a)
+  {
+      rapidjson::Value imu_object(rapidjson::kObjectType);
+
+      rapidjson::Value accelerometer(rapidjson::kObjectType);
+      {
+          rapidjson::Value scale_and_alignment(rapidjson::kArrayType);
+          int j = 0;
+          for (unsigned i = 0; i < 9; i++)
+          {
+              if (i == 0 || i == 8 || i == 4)
+              {
+                  scale_and_alignment.PushBack(scale_factors_.tail<3>()(j), a);
+                  j++;
+              }
+              else
+              {
+                  scale_and_alignment.PushBack(0.0, a);
+              }
+          }
+          accelerometer.AddMember(KEY_IMU_SCALE_AND_ALIGNMENT, scale_and_alignment, a);
+
+          rapidjson::Value bias(rapidjson::kArrayType);
+          for (int i = 0; i < 3; i++) bias.PushBack(biases_.tail<3>()(i), a);
+          accelerometer.AddMember(KEY_IMU_BIAS, bias, a);
+
+          rapidjson::Value bias_variance(rapidjson::kArrayType);
+          //v3 bias_variance_values = { 9.999999747378752e-05, 9.999999747378752e-05, 9.999999747378752e-05 };
+          v3 bias_variance_values = { 10.0e-05, 10.0e-05, 10.0e-05 };
+          for (int i = 0; i < 3; i++) bias_variance.PushBack(bias_variance_values[i], a);
+          accelerometer.AddMember(KEY_IMU_BIAS_VARIANCE, bias_variance, a);
+
+          accelerometer.AddMember(KEY_IMU_NOISE_VARIANCE, accel_sigma_*accel_sigma_, a);
+      }
+      imu_object.AddMember(KEY_IMU_ACCELEROMETER, accelerometer, a);
+
+      rapidjson::Value gyroscope(rapidjson::kObjectType);
+      {
+          rapidjson::Value scale_and_alignment(rapidjson::kArrayType);
+          int j = 0;
+          for (unsigned i = 0; i < 9; i++)
+          {
+              if (i == 0 || i == 8 || i == 4)
+              {
+                  scale_and_alignment.PushBack(scale_factors_.head<3>()(j), a);
+                  j++;
+              }
+              else
+              {
+                  scale_and_alignment.PushBack(0.0, a);
+              }
+          }
+          gyroscope.AddMember(KEY_IMU_SCALE_AND_ALIGNMENT, scale_and_alignment, a);
+
+          rapidjson::Value bias(rapidjson::kArrayType);
+          for (int i = 0; i < 3; i++) bias.PushBack(biases_.head<3>()(i), a);
+          gyroscope.AddMember(KEY_IMU_BIAS, bias, a);
+
+          rapidjson::Value bias_variance(rapidjson::kArrayType);
+          //v3 bias_variance_values = { 4.999999987376214e-07, 4.999999987376214e-07, 4.999999987376214e-07 };
+          v3 bias_variance_values = { 5.0e-07, 5.0e-07, 5.0e-07 };
+          for (int i = 0; i < 3; i++) bias_variance.PushBack(bias_variance_values[i], a);
+          gyroscope.AddMember(KEY_IMU_BIAS_VARIANCE, bias_variance, a);
+
+          gyroscope.AddMember(KEY_IMU_NOISE_VARIANCE, gyro_sigma_*gyro_sigma_, a);
+
+      }
+      imu_object.AddMember(KEY_IMU_GYROSCOPE, gyroscope, a);
+
+      rapidjson::Value extrinsics(rapidjson::kObjectType);
+      Sophus::SE3d T_id;
+      copy_extrinsics_to_json(T_id, extrinsics, a);
+      imu_object.AddMember(KEY_EXTRINSICS, extrinsics, a);
+
+      imus.PushBack(imu_object, a);
+  }
+
+
+
+
+
+
+  void copy_camera_to_json(const std::unique_ptr<CameraAndPose> & camera, rapidjson::Value & cameras, rapidjson::Document::AllocatorType& a)
+  {
+      rapidjson::Value camera_object(rapidjson::kObjectType);
+
+      rapidjson::Value image_size(rapidjson::kArrayType);
+      image_size.PushBack((unsigned)camera->camera->Width(), a);
+      image_size.PushBack((unsigned)camera->camera->Height(), a);
+      camera_object.AddMember(KEY_CAMERA_IMAGE_SIZE, image_size, a);
+
+      rapidjson::Value center(rapidjson::kArrayType);
+      center.PushBack(camera->camera->GetParams()[2], a);
+      center.PushBack(camera->camera->GetParams()[3], a);
+      camera_object.AddMember(KEY_CAMERA_CENTER, center, a);
+
+      rapidjson::Value focal_length(rapidjson::kArrayType);
+      focal_length.PushBack(camera->camera->GetParams()[0], a);
+      focal_length.PushBack(camera->camera->GetParams()[1], a);
+      camera_object.AddMember(KEY_CAMERA_FOCAL_LENGTH, focal_length, a);
+
+      rapidjson::Value distortion(rapidjson::kObjectType);
+      {
+            rapidjson::Value distortion_type(rapidjson::kStringType);
+            distortion_type = "kannalabrandt4";
+            rapidjson::Value distortion_k(rapidjson::kArrayType);
+            for (int i = 0; i < 4; i++) distortion_k.PushBack(camera->camera->GetParams()[i+4], a);
+            distortion.AddMember(KEY_CAMERA_DISTORTION_K, distortion_k, a);
+            distortion.AddMember(KEY_CAMERA_DISTORTION_TYPE, distortion_type, a);
+      }
+
+      camera_object.AddMember(KEY_CAMERA_DISTORTION, distortion, a);
+
+      rapidjson::Value extrinsics(rapidjson::kObjectType);
+      copy_extrinsics_to_json(camera->T_ck.inverse(), extrinsics, a);
+      camera_object.AddMember(KEY_EXTRINSICS, extrinsics, a);
+
+      cameras.PushBack(camera_object, a);
+  }
+
+
+
+  void copy_calibration_to_json(rapidjson::Value & json, rapidjson::Document::AllocatorType& a)
+  {
+      rapidjson::Value id(rapidjson::kStringType);
+      id.SetString(FLAGS_device_serial.c_str(), a);
+      json.AddMember(KEY_DEVICE_ID, id, a);
+
+      rapidjson::Value type(rapidjson::kStringType);
+      type.SetString("TM2", a);
+      json.AddMember(KEY_DEVICE_TYPE, type, a);
+
+      json.AddMember(KEY_VERSION, CALIBRATION_VERSION, a);
+
+      rapidjson::Value cameras(rapidjson::kArrayType);
+      for (const auto &camera : cameras_) copy_camera_to_json(camera, cameras, a);
+      json.AddMember(KEY_CAMERAS, cameras, a);
+
+      rapidjson::Value depths(rapidjson::kArrayType);
+      json.AddMember(KEY_DEPTHS, depths, a);
+
+      rapidjson::Value imus(rapidjson::kArrayType);
+      copy_imu_to_json(imus, a);
+      json.AddMember(KEY_IMUS, imus, a);
+  }
+
+
+
+  // Write json file
+  void WriteJson(const std::string& filename) {
+    std::ofstream outputfile(filename);
+    rapidjson::OStreamWrapper osw(outputfile);
+    rapidjson::PrettyWriter<rapidjson::OStreamWrapper> output_json(osw);
+    rapidjson::Document json;
+
+
+    json.SetObject();
+    copy_calibration_to_json(json, json.GetAllocator());
+    json.Accept(output_json);
+
   }
 
   // Clear all cameras / constraints.
@@ -252,8 +483,8 @@ class ViCalibrator : public ceres::IterationCallback {
   void SetOptimizationFlags(bool bias_active, bool inertial_active,
                             bool rotation_only, bool optimize_imu_time_offset) {
     CHECK(!is_running_);
-    is_scale_factor_active_ = bias_active;
-    is_bias_active_ = bias_active;
+    is_scale_factor_active_ = bias_active && !FLAGS_calibrate_imu_extrinsics_only;
+    is_bias_active_ = bias_active && !FLAGS_calibrate_imu_extrinsics_only;;
     is_inertial_active_ = inertial_active;
     optimize_rotation_only_ = rotation_only;
     optimize_time_offset_ = optimize_imu_time_offset;
@@ -261,13 +492,9 @@ class ViCalibrator : public ceres::IterationCallback {
 
   // Start optimization thread to modify intrinsic / extrinsic parameters.
   void Start() {
-    pthread_attr_init(&thread_attr_);
-    pthread_attr_setdetachstate(&thread_attr_, PTHREAD_CREATE_JOINABLE);
-
     if (!is_running_) {
       should_run_ = true;
-      pthread_create(&thread_, &thread_attr_, &ViCalibrator::SolveThreadStatic,
-                     this);
+      thread_ = std::thread(ViCalibrator::SolveThreadStatic, this);
     } else {
       LOG(WARNING) << "Already Running." << std::endl;
     }
@@ -315,10 +542,10 @@ class ViCalibrator : public ceres::IterationCallback {
 
   // Stop optimization thread.
   void Stop() {
-    if (is_running_) {
+    if (thread_.joinable()) {
       should_run_ = false;
       try {
-        pthread_join(thread_, NULL);
+          thread_.join();
       }
       catch (std::system_error) {
         // thread already died.
@@ -354,14 +581,13 @@ class ViCalibrator : public ceres::IterationCallback {
   // camera extrinsics equal between all cameras for each frame.
   int AddFrame(const Sophus::SE3d& t_wk, double time) {
     CHECK(!is_running_);
-    pthread_mutex_lock(&update_mutex_);
+    std::lock_guard<std::mutex> lock(update_mutex_);
     int id = t_wk_.size();
     VicalibFrame<double> pose(t_wk, Eigen::Vector3d::Zero(),
                               Eigen::Vector3d::Zero(), time);
 
     t_wk_.push_back(
         std::shared_ptr<VicalibFrame<double> >(new VicalibFrame<double>(pose)));
-    pthread_mutex_unlock(&update_mutex_);
 
     return id;
   }
@@ -386,7 +612,7 @@ class ViCalibrator : public ceres::IterationCallback {
                       const Eigen::Vector3d& p_w, const Eigen::Vector2d& p_c,
                       double time) {
     CHECK(!is_running_);
-    pthread_mutex_lock(&update_mutex_);
+    std::lock_guard<std::mutex> lock(update_mutex_);
 
     // Ensure index is valid
     while (NumFrames() < frame) {
@@ -463,8 +689,7 @@ class ViCalibrator : public ceres::IterationCallback {
     cost->Loss() = &loss_func_;
     proj_costs_[camera_id]
         .push_back(std::unique_ptr<calibu::CostFunctionAndParams>(cost));
-
-    pthread_mutex_unlock(&update_mutex_);
+    point_residuals_[camera_id].push_back(PointResidual(frame, time, p_w, p_c, 0));
   }
 
   // Return number of synchronised camera rig frames.
@@ -550,8 +775,8 @@ class ViCalibrator : public ceres::IterationCallback {
     covariance_names_.clear();
     projection_residuals_.clear();
     projection_residuals_.resize(cameras_.size());
-
-    pthread_mutex_lock(&update_mutex_);
+    frame_residuals_.clear();
+    std::lock_guard<std::mutex> lock(update_mutex_);
 
     // Add parameters
     std::stringstream css;
@@ -570,25 +795,35 @@ class ViCalibrator : public ceres::IterationCallback {
       covariance_names_.push_back(css.str());
 
       if (c == 0) {
-        if (!is_inertial_active_) {
+        if (!is_inertial_active_ || FLAGS_evaluate_only) {
           problem->SetParameterBlockConstant(cameras_[c]->T_ck.so3().data());
           problem->SetParameterBlockConstant(
               cameras_[c]->T_ck.translation().data());
+          LOG(INFO) << "Translation and rotation locked " << std::endl;
         } else {
           problem->SetParameterBlockVariable(cameras_[c]->T_ck.so3().data());
-          if (optimize_rotation_only_) {
+          if (true/*optimize_rotation_only_*/) {
             problem->SetParameterBlockConstant(
                 cameras_[c]->T_ck.translation().data());
+            LOG(INFO) << "Translation locked and rotation free" << std::endl;
           } else {
             problem->SetParameterBlockVariable(
                 cameras_[c]->T_ck.translation().data());
+            LOG(INFO) << "Translation and rotation free " << std::endl;
           }
         }
+      }
+      else {
+          if (FLAGS_evaluate_only) {
+              problem->SetParameterBlockConstant(cameras_[c]->T_ck.so3().data());
+              problem->SetParameterBlockConstant(
+                  cameras_[c]->T_ck.translation().data());
+          }
       }
 
       problem->AddParameterBlock(cameras_[c]->camera->GetParams().data(),
                                  cameras_[c]->camera->NumParams());
-      if (fix_intrinsics_) {
+      if (fix_intrinsics_ || FLAGS_evaluate_only) {
         problem->SetParameterBlockConstant(cameras_[c]->camera->GetParams().data());
       } else {
         covariance_params_.push_back(cameras_[c]->camera->GetParams().data());
@@ -632,6 +867,10 @@ class ViCalibrator : public ceres::IterationCallback {
               scale_factors_.data(),   &imu_.time_offset_};
 
           imu_costs_.push_back(std::unique_ptr<ImuCostFunctionAndParams>(cost));
+
+          // external pose cost is also per frame
+
+
         }
         ++num_imu_residuals_;
       }
@@ -648,10 +887,10 @@ class ViCalibrator : public ceres::IterationCallback {
       }
     }
 
-    if (FLAGS_calibrate_imu && is_inertial_active_) {
+    if ((FLAGS_calibrate_imu && is_inertial_active_) || FLAGS_evaluate_only) {
       for (size_t kk = 0; kk < imu_costs_.size(); ++kk) {
         calibu::CostFunctionAndParams& cost = *imu_costs_[kk];
-        problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params());
+        imu_residuals_.push_back(problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params()));
       }
 
       if (optimize_rotation_only_) {
@@ -660,12 +899,12 @@ class ViCalibrator : public ceres::IterationCallback {
       }
 
       // only do this once
-      if (!is_bias_active_) {
+      if (!is_bias_active_ || FLAGS_evaluate_only) {
         LOG(INFO) << "Setting bias terms to constant... ";
         problem->SetParameterBlockConstant(biases_.data());
       }
 
-      if (!is_scale_factor_active_) {
+      if (!is_scale_factor_active_ || FLAGS_evaluate_only) {
         LOG(INFO) << "Setting scale factor terms to constant... ";
         problem->SetParameterBlockConstant(scale_factors_.data());
       }
@@ -675,7 +914,17 @@ class ViCalibrator : public ceres::IterationCallback {
         problem->SetParameterBlockConstant(&imu_.time_offset_);
       }
     }
-    pthread_mutex_unlock(&update_mutex_);
+
+    /*
+    if (is_external_pose_active_){
+      for (size_t kk = 0; kk < external_pose_costs_.size(); ++kk) {
+        calibu::CostFunctionAndParams& cost = *external_pose_costs_[kk];
+        problem->AddResidualBlock(cost.Cost(), cost.Loss(), cost.Params());
+      }
+    }
+
+    */
+
   }
 
   // Entry point for background solver thread.
@@ -856,63 +1105,103 @@ class ViCalibrator : public ceres::IterationCallback {
     return covariance_mat;
   }
 
+
   void RemoveOutliers()
   {
-    std::vector<std::vector<ceres::ResidualBlockId>> outliers;
-    std::vector<std::vector<ceres::ResidualBlockId>> inliers;
-    outliers.resize(cameras_.size());
-    inliers.resize(cameras_.size());
+      std::vector<std::vector<ceres::ResidualBlockId>> outliers;
+      std::vector<std::vector<ceres::ResidualBlockId>> inliers;
+      outliers.resize(cameras_.size());
+      inliers.resize(cameras_.size());
 
-    // search for outliers in each camera stream
-    for (size_t ii = 0; ii < cameras_.size(); ++ii) {
+      // search for outliers in each camera stream
+      for (size_t ii = 0; ii < cameras_.size(); ++ii) {
 
-      const double stdev = camera_proj_rmse_[ii];
-      const double threshold = FLAGS_outlier_threshold * stdev;
-      inliers.reserve(projection_residuals_[ii].size());
+          const double stdev = camera_proj_rmse_[ii];
+          const double threshold = FLAGS_outlier_threshold * stdev;
+          inliers.reserve(projection_residuals_[ii].size());
 
-      ceres::Problem::EvaluateOptions options;
-      options.residual_blocks = projection_residuals_[ii];
-      options.apply_loss_function = false;
-      std::vector<double> residuals;
+          ceres::Problem::EvaluateOptions options;
+          options.residual_blocks = projection_residuals_[ii];
+          options.apply_loss_function = false;
+          std::vector<double> residuals;
 
-      // compute reprojection errors
-      problem_->Evaluate(options, nullptr, &residuals, nullptr,
-          nullptr);
+          // compute reprojection errors
+          problem_->Evaluate(options, nullptr, &residuals, nullptr,
+              nullptr);
 
-      // check each reprojection error
-      for (size_t kk = 0; kk < projection_residuals_[ii].size(); ++kk)
-      {
-        const double x = residuals[2 * kk + 0];
-        const double y = residuals[2 * kk + 1];
-        const double error = sqrt(x * x + y * y);
+          // check each reprojection error
+          for (size_t kk = 0; kk < projection_residuals_[ii].size(); ++kk)
+          {
+              const double x = residuals[2 * kk + 0];
+              const double y = residuals[2 * kk + 1];
+              const double error = sqrt(x * x + y * y);
 
-        // check of reproject error exceeds threshold
-        if (error > threshold)
-        {
-          outliers[ii].push_back(projection_residuals_[ii][kk]);
-        }
-        else
-        {
-          inliers[ii].push_back(projection_residuals_[ii][kk]);
-        }
-      }
-    }
-
-    // remove outlier residuals blocks for each camera
-    for (size_t ii = 0; ii < outliers.size(); ++ii)
-    {
-      LOG(INFO) << "Removing " << outliers[ii].size() << "/" <<
-          projection_residuals_[ii].size() << " conics outliers " <<
-          "from camera " << ii << "...";
-
-      // remove each outlier residual block
-      for (size_t kk = 0; kk < outliers[ii].size(); ++kk)
-      {
-        problem_->RemoveResidualBlock(outliers[ii][kk]);
+              // check of reproject error exceeds threshold
+              if (error > threshold)
+              {
+                  outliers[ii].push_back(projection_residuals_[ii][kk]);
+              }
+              else
+              {
+                  inliers[ii].push_back(projection_residuals_[ii][kk]);
+              }
+          }
       }
 
-      projection_residuals_ = inliers;
-    }
+      // remove outlier residuals blocks for each camera
+      for (size_t ii = 0; ii < outliers.size(); ++ii)
+      {
+          LOG(INFO) << "Removing " << outliers[ii].size() << "/" <<
+              projection_residuals_[ii].size() << " conics outliers " <<
+              "from camera " << ii << "...";
+
+          // remove each outlier residual block
+          for (size_t kk = 0; kk < outliers[ii].size(); ++kk)
+          {
+              problem_->RemoveResidualBlock(outliers[ii][kk]);
+          }
+
+          projection_residuals_ = inliers;
+      }
+
+  }
+
+  std::ofstream reproj_error_file_;
+  typedef std::tuple<size_t, double, Eigen::Vector3d, Eigen::Vector2d, double> PointResidual;
+  std::map<size_t, std::vector<PointResidual>> point_residuals_;
+  std::map<size_t, std::pair<size_t, double>> frame_residuals_; //map<frameId, pair<numOfPoints, reprojection_error = 2 times * residual per frame.>
+  //typedef std::tuple<size_t, Eigen::Vector3d, Eigen::Vector2d, double> PointResidual;
+  void logBlockResiduals(size_t cameraid, const std::vector<double> &block_residuals) {
+      if (block_residuals.size() != point_residuals_[cameraid].size() * 2) return;
+      size_t curFrameID = std::get<0>(point_residuals_[cameraid][0]);
+      frame_residuals_[curFrameID] = { 0,0 };
+      for (size_t pid = 0; pid < point_residuals_[cameraid].size(); pid++) {
+        PointResidual &entry = point_residuals_[cameraid][pid];
+        double error_sqr = std::pow(block_residuals[pid * 2], 2) + std::pow(block_residuals[pid * 2 + 1], 2);
+        std::get<4>(entry) = std::sqrt(error_sqr);
+        if (curFrameID != std::get<0>(entry)) { //initialize values
+            curFrameID = std::get<0>(entry);
+            frame_residuals_[curFrameID] = { 0, 0 };
+        }
+        frame_residuals_[std::get<0>(entry)].first += 1;
+        frame_residuals_[std::get<0>(entry)].second += error_sqr;
+      }
+      if (reproj_error_file_.is_open()) {
+          curFrameID = std::get<0>(point_residuals_[cameraid][0]);
+          double frame_rms = std::sqrt(frame_residuals_[curFrameID].second / (2 * frame_residuals_[curFrameID].first));
+          for (PointResidual &entry : point_residuals_[cameraid]) {
+              if (curFrameID != std::get<0>(entry)) { //initialize values
+                  curFrameID = std::get<0>(entry);
+                  frame_rms = std::sqrt(frame_residuals_[curFrameID].second / (2 * frame_residuals_[curFrameID].first));
+              }
+              //[cameraid,frameid,frame_reprojection_error_rms,3dp_x,3dp_y,3dp_z,2d_x,2d_y,point_reprojection_error]
+              reproj_error_file_ << cameraid << "," << std::get<0>(entry) << "," << std::get<1>(entry) << "," << frame_rms <<
+                  "," << std::get<2>(entry).x() << "," << std::get<2>(entry).y() << "," << std::get<2>(entry).z() <<
+                  "," << std::get<3>(entry).x() << "," << std::get<3>(entry).y() << "," << std::get<4>(entry) << std::endl;
+          }
+          reproj_error_file_.flush();
+      }
+
   }
 
   // Runs the optimization in a background thread.
@@ -947,12 +1236,13 @@ class ViCalibrator : public ceres::IterationCallback {
                   << GetGravityVector(imu_.g_, gravity()).transpose();
         is_gravity_initialized_ = true;
       }
-
+	  std::vector<double> point_residuals;
       // Crank optimization
       while (problem_->NumResiduals() > 0 && should_run_ && !is_finished_) {
         try {
           ceres::Solver::Summary summary;
           UpdateImuWeights();
+
           ceres::Solve(solver_options_, problem_.get(), &summary);
 
           // Evaluate the reprojection error for each camera.
@@ -961,34 +1251,57 @@ class ViCalibrator : public ceres::IterationCallback {
             options.residual_blocks = projection_residuals_[ii];
             options.apply_loss_function = false;
             double cost;
-            problem_->Evaluate(options, &cost, nullptr, nullptr, nullptr);
+            problem_->Evaluate(options, &cost, &point_residuals, nullptr, nullptr);
             camera_proj_rmse_[ii] =
                 sqrt(cost / (projection_residuals_[ii].size()));
 
             LOG(INFO) << "Reprojection error for camera " << ii << ": "
                       << sqrt(cost) << " rmse: " << camera_proj_rmse_[ii]
                       << std::endl;
+            //reproj_error_file_ << "camera_proj_rmse_[" << ii << "]" << camera_proj_rmse_[ii] << std::endl;
+            logBlockResiduals(ii, point_residuals);
           }
+
+          if ((FLAGS_calibrate_imu && is_inertial_active_) || FLAGS_evaluate_only)
+          {
+              ceres::Problem::EvaluateOptions options;
+              options.residual_blocks = imu_residuals_;
+              options.apply_loss_function = false;
+              double cost;
+              problem_->Evaluate(options, &cost, nullptr, nullptr, nullptr);
+              imu_rmse_ =
+                  sqrt(cost / (imu_residuals_.size()));
+
+              LOG(INFO) << "Imu cost : "
+                  << sqrt(cost) << " rmse: " << imu_rmse_
+                  << std::endl;
+          }
+
 
           LOG(INFO) << summary.FullReport() << std::endl;
 
-          mse_ = summary.final_cost / summary.num_residuals;
+          if (summary.num_residuals > 0) {
+              mse_ = summary.final_cost / summary.num_residuals;
+          }
           if (summary.termination_type != ceres::NO_CONVERGENCE &&
-              FLAGS_calibrate_imu) {
-            if (!is_inertial_active_) {
+              (FLAGS_calibrate_imu || FLAGS_evaluate_only)) {
+
+            if (!is_inertial_active_ && !FLAGS_evaluate_only) {
               is_inertial_active_ = true;
               LOG(INFO) << "Activating inertial terms. Optimizing rotation "
                            "component of T_ck..." << std::endl;
-            } else if (optimize_rotation_only_) {
+            } else if (optimize_rotation_only_ && !FLAGS_evaluate_only) {
               LOG(INFO) << "Finished optimizing rotations. Activating T_ck "
                            "translation optimization..." << std::endl;
               optimize_rotation_only_ = false;
               problem_->SetParameterBlockVariable(imu_.g_.data());
             // } else if (!is_bias_active_) {
-              is_bias_active_ = true;
-              LOG(INFO) << "Activating bias terms... " << std::endl;
-              problem_->SetParameterBlockVariable(biases_.data());
-            } else if (!is_scale_factor_active_) {
+              if (!FLAGS_calibrate_imu_extrinsics_only) {
+                  is_bias_active_ = true;
+                  LOG(INFO) << "Activating bias terms... " << std::endl;
+                  problem_->SetParameterBlockVariable(biases_.data());
+              }
+            } else if (!is_scale_factor_active_ && !FLAGS_calibrate_imu_extrinsics_only) {
               is_scale_factor_active_ = true;
               LOG(INFO) << "Activating scale factor terms... " << std::endl;
               problem_->SetParameterBlockVariable(scale_factors_.data());
@@ -1039,9 +1352,8 @@ class ViCalibrator : public ceres::IterationCallback {
     is_running_ = false;
   }
 
-  pthread_mutex_t update_mutex_ = PTHREAD_MUTEX_INITIALIZER ;
-  pthread_attr_t thread_attr_;
-  pthread_t thread_;
+  std::mutex update_mutex_;
+  std::thread thread_;
   bool should_run_;
   bool is_running_;
 
@@ -1055,8 +1367,11 @@ class ViCalibrator : public ceres::IterationCallback {
   std::vector<std::unique_ptr<ImuCostFunctionAndParams> > imu_costs_;
   std::vector<double*> covariance_params_;
   std::vector<double> camera_proj_rmse_;
+  double imu_rmse_;
   std::vector<std::string> covariance_names_;
   std::vector<std::vector<ceres::ResidualBlockId> > projection_residuals_;
+
+  std::vector<ceres::ResidualBlockId>  imu_residuals_;
 
   ceres::Problem::Options prob_options_;
   ceres::Solver::Options solver_options_;

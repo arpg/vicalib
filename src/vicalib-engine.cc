@@ -7,6 +7,9 @@
 #include <unistd.h>
 
 #include <fstream>
+#include <sstream>
+
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include <calibu/cam/camera_xml.h>
 #include <calibu/cam/camera_models_crtp.h>
@@ -24,6 +27,9 @@
 #include <vicalib/vicalibrator.h>
 #include <vicalib/calibration-stats.h>
 
+#include <rapidjson/istreamwrapper.h>
+#include <rapidjson/document.h>
+
 static const int64_t kCalibrateAllPossibleFrames = -1;
 
 #ifdef BUILD_GUI
@@ -34,10 +40,13 @@ DECLARE_bool(use_system_time); // Defined in vicalib-task.cc
 
 DEFINE_bool(calibrate_imu, true,
             "Calibrate the IMU in addition to the camera.");
+DEFINE_bool(calibrate_imu_extrinsics_only, false,
+    "Calibrate the IMU in addition to the camera.");
 DEFINE_bool(calibrate_intrinsics, true,
             "Calibrate the camera intrinsics as well as the extrinsics.");
 DEFINE_string(device_serial, "-1", "Serial number of device.");
 DEFINE_bool(save_poses,false, "Save calibrated camera poses when done.");
+DEFINE_string(save_poses_path, FLAGS_log_dir + "/poses.csv", "Path to save calibrated camera poses when done.");
 DEFINE_bool(exit_vicalib_on_finish, true,
             "Exit vicalib when the optimization finishes.");
 DEFINE_int32(frame_skip, 0, "Number of frames to skip between constraints.");
@@ -53,6 +62,9 @@ DEFINE_bool(output_conics, false,
 DEFINE_string(grid_preset, "",
              "Which grid preset to use. "
              "Use \"small\" for small GWU grid, \"large\" for large Google grid, or \"letter\" for the CU grid.");
+DEFINE_string(pattern_preset_only, "",
+                "Which pattern preset to use.  Dimensions can be adjusted."
+                "Use \"small\" for small GWU grid, \"large\" for large Google grid, or \"letter\" for the CU grid.");
 DEFINE_double(max_reprojection_error, 0.15,  // pixels
               "Maximum allowed reprojection error.");
 DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
@@ -60,6 +72,8 @@ DEFINE_int64(num_vicalib_frames, kCalibrateAllPossibleFrames,
 DEFINE_bool(print_poses, false, "Output poses to poses.txt");
 DEFINE_string(output, "cameras.xml",
               "Output XML file to write camera models to.");
+DEFINE_string(output_json, "cameras.json",
+              "Output json file to write camera models to.");
 DEFINE_string(output_log_file, "vicalibrator.log",
               "Calibration result output log file.");
 DEFINE_bool(scaled_ir_depth_cal, false,
@@ -85,6 +99,10 @@ DEFINE_string(model_files, "",
               "Comma-separated list of camera model files pre-load. "
               "If specified this supercedes the 'models' flag."
               "Must be in channel order.");
+
+DEFINE_string(input_json, "",
+              "Input json file to write camera models to.");
+
 DEFINE_string(output_pattern_file, "",
               "Output EPS or SVG file to save the calibration pattern.");
 DEFINE_double(grid_large_rad, 0.00423,
@@ -102,6 +120,11 @@ DEFINE_bool(remove_outliers, false,
 DEFINE_double(outlier_threshold, 2.0,
               "Minimum standard-deviations of reprojection error for conic "
               "outlier classification");
+
+
+DEFINE_bool(evaluate_only, false,
+    "Evaluate the cost of the input calibraiton");
+
 
 namespace visual_inertial_calibration {
 
@@ -150,7 +173,7 @@ VicalibEngine::~VicalibEngine() {
   }
 }
 
-std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
+std::shared_ptr<VicalibTask> VicalibEngine::InitTask(unsigned char * json_data, int json_data_length) {
   std::vector<size_t> widths, heights;
   for (size_t i = 0; i < camera_->NumChannels(); ++i) {
     widths.push_back(camera_->Width(i));
@@ -177,6 +200,8 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     }
   }
 
+
+
   if( model_files.empty() && model_strings.size() < camera_->NumChannels()) {
     LOG(INFO) << "Only " << model_strings.size() <<
       " models declared using 'model_strings'.  Need one for all the "
@@ -184,15 +209,104 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     model_strings.resize(camera_->NumChannels(), "poly3");
   }
 
+  Vector6d biases(Vector6d::Zero());
+  Vector6d scale_factors(Vector6d::Ones());
+
   // use model xml files, if provided
   aligned_vector<CameraAndPose> input_cameras;
-  if( !model_files.empty() ){
-    for (size_t i = 0; i < model_files.size(); ++i) {
-      std::shared_ptr<calibu::Rigd> rig = calibu::ReadXmlRig(model_files[i]);
-      input_cameras.emplace_back( rig->cameras_[0], Sophus::SE3d());
-      LOG(INFO) << "Initalizing with user provided model file: "
-        <<  model_files[i] << "\n" ;
-    }
+  if( !model_files.empty() || json_data != nullptr || !FLAGS_input_json.empty()){
+
+      if(!model_files.empty() && json_data == nullptr && FLAGS_input_json.empty()) {
+          for (size_t i = 0; i < model_files.size(); ++i) {
+              std::shared_ptr<calibu::Rigd> rig = calibu::ReadXmlRig(model_files[i]);
+              for (size_t i = 0; i < rig->NumCams(); i++) {
+                  input_cameras.emplace_back(rig->cameras_[i], rig->cameras_[i]->Pose().inverse());
+              }
+              LOG(INFO) << "Initalizing with user provided model file: "
+                        << model_files[i] << "\n";
+          }
+      }
+
+
+      if ((!FLAGS_input_json.empty() || json_data != nullptr) && model_files.empty())
+      {
+
+          rapidjson::Document input_json;
+
+          if (!FLAGS_input_json.empty()) {
+              std::ifstream inputfile(FLAGS_input_json);
+              rapidjson::IStreamWrapper inputwrapper(inputfile);
+              input_json.ParseStream<rapidjson::kParseFullPrecisionFlag>(inputwrapper);
+          }
+          else if (json_data != nullptr)
+          {
+              std::stringstream inputfile;
+              inputfile << std::string(reinterpret_cast<char*>(json_data));
+              rapidjson::IStreamWrapper inputwrapper(inputfile);
+              input_json.ParseStream<rapidjson::kParseFullPrecisionFlag>(inputwrapper);
+          }
+
+          if (FLAGS_device_serial.compare("-1") == 0) {
+              FLAGS_device_serial = input_json[KEY_DEVICE_ID].GetString();
+          }
+
+          if (input_json.HasMember(KEY_CAMERAS))
+          {
+
+              const rapidjson::Value& cameras = input_json[KEY_CAMERAS];
+
+              for (auto& camera : cameras.GetArray())
+              {
+
+                  std::shared_ptr<calibu::KannalaBrandtCamera<double>> current_camera = std::make_shared<calibu::KannalaBrandtCamera<double>>();
+
+                  auto params0 = Eigen::VectorXd(8);
+                  params0 << camera[KEY_CAMERA_FOCAL_LENGTH][0].GetDouble(), camera[KEY_CAMERA_FOCAL_LENGTH][1].GetDouble(), camera[KEY_CAMERA_CENTER][0].GetDouble(), camera[KEY_CAMERA_CENTER][1].GetDouble(),
+                      camera[KEY_CAMERA_DISTORTION][KEY_CAMERA_DISTORTION_K][0].GetDouble(), camera[KEY_CAMERA_DISTORTION][KEY_CAMERA_DISTORTION_K][1].GetDouble(), camera[KEY_CAMERA_DISTORTION][KEY_CAMERA_DISTORTION_K][2].GetDouble(), camera[KEY_CAMERA_DISTORTION][KEY_CAMERA_DISTORTION_K][3].GetDouble();
+
+                  current_camera->SetParams(params0);
+
+                  current_camera->SetImageDimensions(camera[KEY_CAMERA_IMAGE_SIZE][0].GetInt(), camera[KEY_CAMERA_IMAGE_SIZE][1].GetInt());
+
+                  auto current_q = to_quaternion(rotation_vector(camera[KEY_EXTRINSICS][KEY_EXTRINSICS_W][0].GetDouble(), camera[KEY_EXTRINSICS][KEY_EXTRINSICS_W][1].GetDouble(), camera[KEY_EXTRINSICS][KEY_EXTRINSICS_W][2].GetDouble()));
+
+                  auto t = v3(camera[KEY_EXTRINSICS][KEY_EXTRINSICS_T][0].GetDouble(), camera[KEY_EXTRINSICS][KEY_EXTRINSICS_T][1].GetDouble(), camera[KEY_EXTRINSICS][KEY_EXTRINSICS_T][2].GetDouble());
+
+                  current_camera->SetPose(Sophus::SE3d(current_q, t));
+
+                  input_cameras.emplace_back(current_camera, current_camera->Pose().inverse());
+
+              }
+
+              if (input_json.HasMember(KEY_IMUS))
+              {
+                  const rapidjson::Value& imus = input_json[KEY_IMUS];
+
+
+                  const rapidjson::Value& imu = imus[0];
+                  {
+                      biases << imu[KEY_IMU_GYROSCOPE][KEY_IMU_BIAS][0].GetDouble(), imu[KEY_IMU_GYROSCOPE][KEY_IMU_BIAS][1].GetDouble(), imu[KEY_IMU_GYROSCOPE][KEY_IMU_BIAS][2].GetDouble(),
+                          imu[KEY_IMU_ACCELEROMETER][KEY_IMU_BIAS][0].GetDouble(), imu[KEY_IMU_ACCELEROMETER][KEY_IMU_BIAS][1].GetDouble(), imu[KEY_IMU_ACCELEROMETER][KEY_IMU_BIAS][2].GetDouble();
+
+                      scale_factors << imu[KEY_IMU_GYROSCOPE][KEY_IMU_SCALE_AND_ALIGNMENT][0].GetDouble(), imu[KEY_IMU_GYROSCOPE][KEY_IMU_SCALE_AND_ALIGNMENT][4].GetDouble(), imu[KEY_IMU_GYROSCOPE][KEY_IMU_SCALE_AND_ALIGNMENT][8].GetDouble(),
+                          imu[KEY_IMU_ACCELEROMETER][KEY_IMU_SCALE_AND_ALIGNMENT][0].GetDouble(), imu[KEY_IMU_ACCELEROMETER][KEY_IMU_SCALE_AND_ALIGNMENT][4].GetDouble(), imu[KEY_IMU_ACCELEROMETER][KEY_IMU_SCALE_AND_ALIGNMENT][8].GetDouble();
+
+
+                      FLAGS_gyro_sigma = sqrt(imu[KEY_IMU_GYROSCOPE][KEY_IMU_NOISE_VARIANCE].GetDouble());
+
+                      FLAGS_accel_sigma = sqrt(imu[KEY_IMU_ACCELEROMETER][KEY_IMU_NOISE_VARIANCE].GetDouble());
+
+                  }
+              }
+
+          }
+          else
+          {
+              LOG(ERROR) << "Invalid input json file " << FLAGS_input_json;
+          }
+
+      }
+
   }
   else{
     for (size_t i = 0; i < model_strings.size(); ++i) {
@@ -231,24 +345,24 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
         input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "rational6" || type == "rational") {
-    Eigen::Vector2i size_;
-    Eigen::VectorXd params_(calibu::Rational6Camera<double>::NumParams);
-    size_ << w, h;
-    params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-    std::shared_ptr<calibu::CameraInterface<double>>
-    starting_cam(new calibu::Rational6Camera<double>(params_, size_));
-    starting_cam->SetType("calibu_fu_fv_u0_v0_rational6");
-    input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::Rational6Camera<double>::NumParams);
+        size_ << w, h;
+        params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+        starting_cam(new calibu::Rational6Camera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_rational6");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "kb4") {
-    Eigen::Vector2i size_;
-    Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
-    size_ << w, h;
-    params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
-    std::shared_ptr<calibu::CameraInterface<double>>
-      starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
-    starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
-    input_cameras.emplace_back(starting_cam, Sophus::SE3d());
+        Eigen::Vector2i size_;
+        Eigen::VectorXd params_(calibu::KannalaBrandtCamera<double>::NumParams);
+        size_ << w, h;
+        params_  << 300, 300, w/2.0, h/2.0, 0.0, 0.0, 0.0, 0.0;
+        std::shared_ptr<calibu::CameraInterface<double>>
+          starting_cam(new calibu::KannalaBrandtCamera<double>(params_, size_));
+        starting_cam->SetType("calibu_fu_fv_u0_v0_kb4");
+        input_cameras.emplace_back(starting_cam, Sophus::SE3d());
 
       } else if (type == "linear") {
         Eigen::Vector2i size_;
@@ -270,8 +384,6 @@ std::shared_ptr<VicalibTask> VicalibEngine::InitTask() {
     input_cameras[i].camera->SetSerialNumber(images->at(i)->SerialNumber());
   }
 
-  Vector6d biases(Vector6d::Zero());
-  Vector6d scale_factors(Vector6d::Ones());
 
   if (FLAGS_use_static_threshold_preset) {
     switch (FLAGS_static_threshold_preset) {
@@ -352,6 +464,7 @@ inline Eigen::Matrix<double, 6, 1> _T2Cart(const Eigen::Matrix4d& T) {
   return Cart;
 }
 
+
 void VicalibEngine::WriteCalibration() {
   vicalib_->GetCalibrator().WriteCameraModels(FLAGS_output);
   if (FLAGS_print_poses) {
@@ -370,6 +483,9 @@ void VicalibEngine::WriteCalibration() {
     }
     fclose(f);
   }
+
+  vicalib_->GetCalibrator().WriteJson(FLAGS_output_json);
+
 }
 
 void VicalibEngine::CalibrateAndDrawLoop() {
@@ -407,7 +523,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
       WriteCalibration();
 
       if( FLAGS_save_poses ){
-        std::ofstream file("poses.csv");
+        std::ofstream file(FLAGS_save_poses_path);
         file << "\% Pose file generated with vicalib.\n"
              << "\% Each line is the 12 elements from the top 3 rows of a 4x4"
              << "transformation matrix, printed row major.\n";
@@ -415,7 +531,10 @@ void VicalibEngine::CalibrateAndDrawLoop() {
         for( size_t ii = 0; ii < vicalib_->GetCalibrator().NumFrames(); ii++ ){
           Eigen::Matrix4d t_wk =
             vicalib_->GetCalibrator().GetFrame(ii)->t_wp_.matrix();
-          file << t_wk.row(0) << "     " << t_wk.row(1)
+          file.precision(10);
+          file.setf( std::ios::fixed, std:: ios::floatfield );
+
+          file << vicalib_->GetCalibrator().GetFrame(ii)->time_ << " " << t_wk.row(0) << "     " << t_wk.row(1)
             << "     " << t_wk.row(2) << std::endl;
         }
         file.close();
@@ -423,7 +542,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
 
       finished = true;
       if (FLAGS_exit_vicalib_on_finish) {
-        exit(0);
+        break;
       }
     }
     Draw(vicalib_);
@@ -432,7 +551,7 @@ void VicalibEngine::CalibrateAndDrawLoop() {
   }
 }
 
-void VicalibEngine::Run() {
+void VicalibEngine::Run(unsigned char * json_data, int json_data_length) {
   CreateGrid();
   if (!camera_) {
     if (!FLAGS_output_pattern_file.empty())
@@ -444,7 +563,7 @@ void VicalibEngine::Run() {
     else
       LOG(FATAL) << "No camera URI given";
   }
-  while (CameraLoop() && !vicalib_->IsRunning() && !SeenEnough()) {}
+  while (CameraLoop(json_data, json_data_length) && !vicalib_->IsRunning() && !SeenEnough()) {}
   stop_sensors_callback_();
   sensors_finished_ = true;
   CalibrateAndDrawLoop();
@@ -456,12 +575,19 @@ void VicalibEngine::CreateGrid() {
   Eigen::Vector2d offset(0,0);
   grid_spacing_ = FLAGS_grid_spacing;
 
-  if (FLAGS_grid_preset.empty()) {
+  if (FLAGS_grid_preset.empty() && FLAGS_pattern_preset_only.empty()) {
     grid_ = calibu::MakePattern(
         FLAGS_grid_height, FLAGS_grid_width, FLAGS_grid_seed);
   }
-  else {
+  else if(!FLAGS_grid_preset.empty() && FLAGS_pattern_preset_only.empty()){
     calibu::LoadGridFromPreset(FLAGS_grid_preset,grid_,grid_spacing_,large_rad,small_rad);
+  }
+  else if(FLAGS_grid_preset.empty() && !FLAGS_pattern_preset_only.empty()){
+      calibu::LoadGridFromPreset(FLAGS_pattern_preset_only, grid_, grid_spacing_, large_rad, small_rad);
+      //update dimensions
+      large_rad = FLAGS_grid_large_rad;
+      small_rad = FLAGS_grid_small_rad;
+      grid_spacing_ = FLAGS_grid_spacing;
   }
 
   if (!FLAGS_output_pattern_file.empty()) {
@@ -494,9 +620,9 @@ void VicalibEngine::CreateGrid() {
   }
 }
 
-bool VicalibEngine::CameraLoop() {
+bool VicalibEngine::CameraLoop(unsigned char * json_data, int json_data_length) {
   if (!vicalib_) {
-    vicalib_ = InitTask();
+    vicalib_ = InitTask(json_data, json_data_length);
 
     if (!vicalib_) {
       LOG(WARNING) << "Vicalib task still NULL. Skipping frame.";

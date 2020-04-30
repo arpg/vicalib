@@ -1,5 +1,6 @@
 *~
 build/
+CMakeLists.txt.user
 
 #CMake-generated files
 CMakeFiles/
@@ -8,7 +9,6 @@ cmake_install.cmake
 cmake_uninstall.cmake
 .cproject
 .project
-vicalib
 install_manifest.txt
 description-pak
 .settings/

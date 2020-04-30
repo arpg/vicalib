@@ -96,10 +96,10 @@ static Eigen::Matrix<T, 9, 1> GetPoseDerivativeJet(
 
   // w (angular rates)
   deriv.template segment<3> (3) = pose.t_wp_.so3().Adj()
-      * (zg.template cast<T>().cwiseProduct(sf.template head<3>()) + bg);
+      * (zg.template cast<T>().cwiseProduct(sf.template head<3>()) - bg);
   // a (acceleration)
   deriv.template segment<3> (6) = pose.t_wp_.so3()
-      * (za.template cast<T>().cwiseProduct(sf.template tail<3>()) + ba) - t_w;
+      * (za.template cast<T>().cwiseProduct(sf.template tail<3>()) - ba) - t_w;
 
   return deriv;
 }

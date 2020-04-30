@@ -3,7 +3,7 @@
 
 #include <time.h>
 #include <random>
-#include <cvars/CVar.h>
+
 #include <calibu/conics/ConicFinder.h>
 #include <calibu/pose/Pnp.h>
 #include <HAL/Messages/Matrix.h>
@@ -117,7 +117,7 @@ VicalibTask::VicalibTask(
     image_processing_[i].Params().at_threshold = 0.9;
     image_processing_[i].Params().at_window_ratio = 30.0;
 
-    conic_finder_[i].Params().conic_min_area = 4.0;
+    conic_finder_[i].Params().conic_min_area = 2.0;
     conic_finder_[i].Params().conic_min_density = 0.6;
     conic_finder_[i].Params().conic_min_aspect = 0.2;
   }
@@ -151,7 +151,7 @@ VicalibTask::VicalibTask(
 
 VicalibTask::~VicalibTask() { }
 
-void VicalibTask::SetupGUI() 
+void VicalibTask::SetupGUI()
 {
 #ifdef HAVE_PANGOLIN
   LOG(INFO) << "Setting up GUI for " << NumStreams() << " streams.";
@@ -205,12 +205,6 @@ void VicalibTask::SetupGUI()
     std::stringstream ss;
     ss << i;
     std::string istr = ss.str();
-    CVarUtils::AttachCVar("proc.adaptive.threshold_" + istr,
-                          &image_processing_[i].Params().at_threshold);
-    CVarUtils::AttachCVar("proc.adaptive.window_ratio_" + istr,
-                          &image_processing_[i].Params().at_window_ratio);
-    CVarUtils::AttachCVar("proc.black_on_white_" + istr,
-                          &image_processing_[i].Params().black_on_white);
     textures_[i].Reinitialise(width(i), height(i), GL_LUMINANCE8);
   }
 
@@ -250,8 +244,9 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
   hal::Msg msg;
   msg.Clear();
   std::vector<aligned_vector<Eigen::Vector2d> > ellipses(n);
+  std::vector<std::vector<int> > inlier_map(n);
   for (size_t ii = 0; ii < n; ++ii) {
-    if (!valid_frames[ii]) {      
+    if (!valid_frames[ii]) {
       LOG(WARNING) << "Frame " << ii << " is invalid.";
       tracking_good_[ii] = false;
       if (ii == 0){
@@ -265,7 +260,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
                                   img->Width(),
                                   img->Height(),
                                   img->Width());
-    conic_finder_[ii].Find(image_processing_[ii]);
+    conic_finder_[ii].Find(image_processing_[ii], input_cameras_[ii].camera);
 
     const std::vector<calibu::Conic,
                       Eigen::aligned_allocator<calibu::Conic> >& conics =
@@ -320,9 +315,13 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
     }
 
     // find camera pose given intrinsics
-    PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
-                  target_[ii].Circles3D(), ellipse_target__map, 0, 0,
-                  &t_cw_[ii]);
+    inlier_map[ii] = PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
+                  target_[ii].Circles3D(), ellipse_target__map, 30, 320.0,
+                  &t_cw_[ii], calib_frame_ == -1);
+
+    //PosePnPRansac(calibrator_.GetCamera(ii).camera, ellipses[ii],
+    //              target_[ii].Circles3D(), ellipse_target__map, 0, 0,
+    //              &t_cw_[ii]);
   }
 
   bool any_good = false;
@@ -353,7 +352,7 @@ void VicalibTask::AddImageMeasurements(const std::vector<bool>& valid_frames) {
           const Eigen::Vector2i pg = target_[ii].Map()[p].pg;
 
           if (0 <= pg(0) && pg(0) < grid_size_(0) && 0 <= pg(1)
-              && pg(1) < grid_size_(1)) {
+              && pg(1) < grid_size_(1) && inlier_map[ii][p] >=0 ) {
             const Eigen::Vector3d pg3d = grid_spacing_
                 * Eigen::Vector3d(pg(0), pg(1), 0);
             // TODO(nimski): Add these correspondences in bulk to
